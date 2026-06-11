@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fitcoach
+      POSTGRES_PASSWORD: fitcoach
+      POSTGRES_DB: fitcoach
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: fitcoach
+      MINIO_ROOT_PASSWORD: fitcoach123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 fitcoach fitcoach123 >/dev/null 2>&1; do
+          sleep 1
+        done
+        mc mb -p local/fitcoach-media >/dev/null 2>&1 || true
+        mc anonymous set download local/fitcoach-media >/dev/null 2>&1 || true
+        printf '%s\n' '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["GET","PUT","HEAD","OPTIONS"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3600}]}' > /tmp/minio-cors.json
+        mc cors set local/fitcoach-media /tmp/minio-cors.json >/dev/null 2>&1 || true
+    restart: "no"
+
+volumes:
+  postgres-data:
+  minio-data:

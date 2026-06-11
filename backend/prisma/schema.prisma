@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  coach
+  athlete
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
+enum FitnessLevel {
+  beginner
+  intermediate
+  advanced
+  elite
+}
+
+enum TrainingGoal {
+  weight_loss
+  muscle_gain
+  strength
+  endurance
+  general_fitness
+}
+
+enum DayType {
+  workout
+  rest
+}
+
+enum ProgramStatus {
+  active
+  completed
+  paused
+  cancelled
+}
+
+enum CoachAthleteInvitationStatus {
+  pending
+  accepted
+  rejected
+  cancelled
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique @db.VarChar(100)
+  passwordHash   String    @map("password_hash")
+  fullName       String    @map("full_name") @db.VarChar(100)
+  phone          String?   @db.VarChar(20)
+  role           UserRole
+  profilePicture String?   @map("profile_picture")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  athleteProfile        AthleteProfile?
+  athleteMetrics        AthleteMetric[]         @relation("AthleteMetrics")
+  recordedMetrics       AthleteMetric[]         @relation("RecordedMetrics")
+  createdExercises      Exercise[]
+  programTemplates      ProgramTemplate[]
+  coachRelations        CoachAthleteRelation[]  @relation("CoachRelations")
+  athleteRelations      CoachAthleteRelation[]  @relation("AthleteRelations")
+  sentInvitations       CoachAthleteInvitation[] @relation("CoachInvitations")
+  receivedInvitations   CoachAthleteInvitation[] @relation("AthleteInvitations")
+  assignedPrograms      AthleteAssignedProgram[] @relation("AthletePrograms")
+  programsAssignedByMe  AthleteAssignedProgram[] @relation("AssignedBy")
+
+  @@map("users")
+}
+
+model AthleteProfile {
+  id                  String         @id @default(uuid()) @db.Uuid
+  userId              String         @unique @map("user_id") @db.Uuid
+  gender              Gender?
+  birthDate           DateTime?      @map("birth_date") @db.Date
+  fitnessLevel        FitnessLevel?  @map("fitness_level")
+  primaryGoal         TrainingGoal?  @map("primary_goal")
+  trainingDaysPerWeek Int?           @map("training_days_per_week")
+  injuries            String?
+  medicalConditions   String?        @map("medical_conditions")
+  lastUpdatedAt       DateTime       @default(now()) @map("last_updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("athlete_profiles")
+}
+
+model AthleteMetric {
+  id                String    @id @default(uuid()) @db.Uuid
+  athleteId         String    @map("athlete_id") @db.Uuid
+  weightKg          Decimal?  @map("weight_kg") @db.Decimal(5, 2)
+  bodyFatPercentage Decimal?  @map("body_fat_percentage") @db.Decimal(4, 1)
+  muscleMassKg      Decimal?  @map("muscle_mass_kg") @db.Decimal(5, 2)
+  biologicalAge     Int?      @map("biological_age")
+  recordedAt        DateTime  @default(now()) @map("recorded_at") @db.Date
+  notes             String?
+  recordedBy        String?   @map("recorded_by") @db.Uuid
+  recordedByRole    UserRole? @map("recorded_by_role")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  athlete User  @relation("AthleteMetrics", fields: [athleteId], references: [id], onDelete: Cascade)
+  recorder User? @relation("RecordedMetrics", fields: [recordedBy], references: [id])
+
+  @@index([athleteId, recordedAt(sort: Desc)], map: "idx_athlete_metrics_athlete_date")
+  @@map("athlete_metrics")
+}
+
+model Exercise {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  nameEn      String?  @map("name_en") @db.VarChar(100)
+  muscleGroup String?  @map("muscle_group") @db.VarChar(50)
+  group       String?  @map("exercise_group") @db.VarChar(50)
+  equipment   String?  @db.VarChar(50)
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdBy   String?  @map("created_by") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  gifMediaId  String?  @map("gif_media_id") @db.Uuid
+
+  creator           User?                  @relation(fields: [createdBy], references: [id])
+  gifMedia          Media?                 @relation(fields: [gifMediaId], references: [id], onDelete: SetNull)
+  templateExercises TemplateExercise[]
+  customizations    AthleteProgramCustomization[]
+  workoutLogs       WorkoutLog[]
+
+  @@map("exercises")
+}
+
+model Media {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(255)
+  contentType String   @map("content_type") @db.VarChar(100)
+  sizeBytes   Int      @map("size_bytes")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  exercises Exercise[]
+
+  @@map("media")
+}
+
+model ProgramTemplate {
+  id                    String   @id @default(uuid()) @db.Uuid
+  coachId               String   @map("coach_id") @db.Uuid
+  title                 String   @db.VarChar(200)
+  description           String?
+  difficultyLevel       String?  @map("difficulty_level") @db.VarChar(20)
+  suggestedForGoal      String?  @map("suggested_for_goal") @db.VarChar(50)
+  suggestedForLevel     String?  @map("suggested_for_level") @db.VarChar(20)
+  suggestedTrainingDays Int?     @map("suggested_training_days")
+  isPublic              Boolean  @default(false) @map("is_public")
+  usageCount            Int      @default(0) @map("usage_count")
+  plan                  Json?    @map("plan")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  coach       User                      @relation(fields: [coachId], references: [id])
+  weeks       TemplateWeek[]
+  assignments AthleteAssignedProgram[]
+
+  @@map("program_templates")
+}
+
+model TemplateWeek {
+  id          String  @id @default(uuid()) @db.Uuid
+  templateId  String  @map("template_id") @db.Uuid
+  weekNumber  Int     @map("week_number")
+  title       String? @db.VarChar(100)
+  notes       String?
+
+  template ProgramTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  days     TemplateDay[]
+
+  @@unique([templateId, weekNumber])
+  @@map("template_weeks")
+}
+
+model TemplateDay {
+  id             String  @id @default(uuid()) @db.Uuid
+  templateWeekId String  @map("template_week_id") @db.Uuid
+  dayNumber      Int     @map("day_number")
+  title          String? @db.VarChar(100)
+  dayType        DayType @default(workout) @map("day_type")
+
+  week      TemplateWeek       @relation(fields: [templateWeekId], references: [id], onDelete: Cascade)
+  exercises TemplateExercise[]
+
+  @@unique([templateWeekId, dayNumber])
+  @@map("template_days")
+}
+
+model TemplateExercise {
+  id              String   @id @default(uuid()) @db.Uuid
+  templateDayId   String   @map("template_day_id") @db.Uuid
+  exerciseId      String   @map("exercise_id") @db.Uuid
+  orderIndex      Int      @map("order_index")
+  sets            Int
+  repsMin         Int?     @map("reps_min")
+  repsMax         Int?     @map("reps_max")
+  restSeconds     Int?     @map("rest_seconds")
+  suggestedWeight Decimal? @map("suggested_weight") @db.Decimal(6, 2)
+  notes           String?
+
+  day      TemplateDay @relation(fields: [templateDayId], references: [id], onDelete: Cascade)
+  exercise Exercise    @relation(fields: [exerciseId], references: [id])
+
+  @@map("template_exercises")
+}
+
+model CoachAthleteRelation {
+  id        String   @id @default(uuid()) @db.Uuid
+  coachId   String   @map("coach_id") @db.Uuid
+  athleteId String   @map("athlete_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  coach   User @relation("CoachRelations", fields: [coachId], references: [id])
+  athlete User @relation("AthleteRelations", fields: [athleteId], references: [id])
+
+  @@unique([coachId, athleteId])
+  @@map("coach_athlete_relations")
+}
+
+model CoachAthleteInvitation {
+  id         String                       @id @default(uuid()) @db.Uuid
+  coachId    String                       @map("coach_id") @db.Uuid
+  athleteId  String                       @map("athlete_id") @db.Uuid
+  message    String?
+  status     CoachAthleteInvitationStatus @default(pending)
+  createdAt  DateTime                     @default(now()) @map("created_at")
+  acceptedAt DateTime?                    @map("accepted_at")
+
+  coach   User @relation("CoachInvitations", fields: [coachId], references: [id])
+  athlete User @relation("AthleteInvitations", fields: [athleteId], references: [id])
+
+  @@index([coachId, status])
+  @@index([athleteId, status])
+  @@map("coach_athlete_invitations")
+}
+
+model AthleteAssignedProgram {
+  id                String        @id @default(uuid()) @db.Uuid
+  athleteId         String        @map("athlete_id") @db.Uuid
+  templateId        String        @map("template_id") @db.Uuid
+  assignedBy        String        @map("assigned_by") @db.Uuid
+  startDate         DateTime      @map("start_date") @db.Date
+  endDate           DateTime      @map("end_date") @db.Date
+  status            ProgramStatus @default(active)
+  isCustomized      Boolean       @default(false) @map("is_customized")
+  customizationNote String?       @map("customization_note")
+  createdAt         DateTime      @default(now()) @map("created_at")
+
+  athlete       User                          @relation("AthletePrograms", fields: [athleteId], references: [id])
+  template      ProgramTemplate               @relation(fields: [templateId], references: [id])
+  assigner      User                          @relation("AssignedBy", fields: [assignedBy], references: [id])
+  customizations AthleteProgramCustomization[]
+  workoutLogs    WorkoutLog[]
+
+  @@map("athlete_assigned_programs")
+}
+
+model AthleteProgramCustomization {
+  id               String   @id @default(uuid()) @db.Uuid
+  athleteProgramId String   @map("athlete_program_id") @db.Uuid
+  weekNumber       Int      @map("week_number")
+  dayNumber        Int?     @map("day_number")
+  exerciseId       String?  @map("exercise_id") @db.Uuid
+  sets             Int?
+  repsMin          Int?     @map("reps_min")
+  repsMax          Int?     @map("reps_max")
+  restSeconds      Int?     @map("rest_seconds")
+  suggestedWeight  Decimal? @map("suggested_weight") @db.Decimal(6, 2)
+  notes            String?
+  isDeleted        Boolean  @default(false) @map("is_deleted")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  athleteProgram AthleteAssignedProgram @relation(fields: [athleteProgramId], references: [id], onDelete: Cascade)
+  exercise       Exercise?               @relation(fields: [exerciseId], references: [id])
+
+  @@map("athlete_program_customizations")
+}
+
+model WorkoutLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  athleteProgramId String   @map("athlete_program_id") @db.Uuid
+  programDayId     String?  @map("program_day_id") @db.Uuid
+  exerciseId       String   @map("exercise_id") @db.Uuid
+  performedDate    DateTime @map("performed_date") @db.Date
+  setNumber        Int      @map("set_number")
+  actualReps       Int?     @map("actual_reps")
+  actualWeight     Decimal? @map("actual_weight") @db.Decimal(6, 2)
+  rpe              Decimal? @db.Decimal(2, 1)
+  isCompleted      Boolean  @default(true) @map("is_completed")
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  athleteProgram AthleteAssignedProgram @relation(fields: [athleteProgramId], references: [id])
+  exercise       Exercise                @relation(fields: [exerciseId], references: [id])
+
+  @@map("workout_logs")
+}
