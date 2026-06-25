@@ -204,6 +204,14 @@ export type AthleteInvitationItem = {
   };
 };
 
+export type AthleteCoachItem = {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  connectedAt: string;
+};
+
 function requireCurrentUserId() {
   const token = getStoredAccessToken();
   const userId = token ? decodeJwtPayload(token)?.sub : undefined;
@@ -251,6 +259,11 @@ export function getAthleteMetrics() {
 export function getAthleteInvitations() {
   const athleteId = requireCurrentUserId();
   return apiGet<AthleteInvitationItem[]>(`/coach-athlete/athlete/${athleteId}/invitations`);
+}
+
+export function getAthleteCoaches() {
+  const athleteId = requireCurrentUserId();
+  return apiGet<AthleteCoachItem[]>(`/coach-athlete/athlete/${athleteId}/coaches`);
 }
 
 export function acceptAthleteInvitation(invitationId: string) {

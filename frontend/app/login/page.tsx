@@ -1,9 +1,10 @@
- "use client";
+"use client";
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getDefaultRouteByRole, getRoleFromToken, loginRequest, persistTokens } from "@/lib/auth";
+import { Activity } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,9 +17,7 @@ export default function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isFormValid || isSubmitting) {
-      return;
-    }
+    if (!isFormValid || isSubmitting) return;
 
     setIsSubmitting(true);
     setError("");
@@ -37,38 +36,60 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center px-5">
-      <form onSubmit={handleSubmit} className="w-full max-w-md rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-800">
-        <h1 className="text-3xl font-black">ورود به FitCoach</h1>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">با ایمیل و رمز عبور وارد پنل خود شوید.</p>
-        <label className="mt-6 block text-sm font-bold">ایمیل</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-transparent px-4 py-3 outline-none focus:border-primary dark:border-slate-700"
-        />
-        <label className="mt-4 block text-sm font-bold">رمز عبور</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-          minLength={8}
-          className="mt-2 w-full rounded-2xl border border-slate-200 bg-transparent px-4 py-3 outline-none focus:border-primary dark:border-slate-700"
-        />
-        {error ? <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-900/30 dark:text-rose-200">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={!isFormValid || isSubmitting}
-          className="mt-6 w-full rounded-2xl bg-primary py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSubmitting ? "در حال ورود..." : "ورود"}
-        </button>
-        <p className="mt-5 text-center text-sm text-slate-500">
-          حساب ندارید؟ <Link href="/register" className="font-black text-primary">ثبت‌نام کنید</Link>
-        </p>
-      </form>
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+            <Activity size={28} className="text-primary" />
+          </div>
+          <h1 className="text-3xl font-black">ورود</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">به پنل FitCoach وارد شوید</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-bold">ایمیل</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              placeholder="your@email.com"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-bold">رمز عبور</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+              minLength={8}
+              placeholder="حداقل ۸ کاراکتر"
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          {error ? (
+            <p className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={!isFormValid || isSubmitting}
+            className="w-full rounded-2xl bg-primary py-3.5 font-black text-white shadow-card transition-all duration-200 hover:bg-primary-dark active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSubmitting ? "در حال ورود..." : "ورود"}
+          </button>
+
+          <p className="text-center text-sm text-[var(--text-muted)]">
+            حساب ندارید؟{" "}
+            <Link href="/register" className="font-bold text-primary transition-colors hover:text-primary-dark">
+              ثبت‌نام کنید
+            </Link>
+          </p>
+        </form>
+      </div>
     </main>
   );
 }

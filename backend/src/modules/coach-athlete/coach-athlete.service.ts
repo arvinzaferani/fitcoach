@@ -60,6 +60,31 @@ export class CoachAthleteService {
     });
   }
 
+  async listAthleteCoaches(athleteId: string) {
+    const relations = await this.prisma.coachAthleteRelation.findMany({
+      where: { athleteId },
+      include: {
+        coach: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return relations.map((relation) => ({
+      id: relation.coach.id,
+      fullName: relation.coach.fullName,
+      email: relation.coach.email,
+      phone: relation.coach.phone,
+      connectedAt: relation.createdAt,
+    }));
+  }
+
   async acceptInvitation(dto: AcceptInvitationDto) {
     const invitation = await this.prisma.coachAthleteInvitation.findUnique({ where: { id: dto.invitationId } });
     if (!invitation) {

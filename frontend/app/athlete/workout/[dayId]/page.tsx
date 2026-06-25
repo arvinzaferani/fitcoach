@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { SetLogger } from "@/components/SetLogger";
+import { SetTimer } from "@/components/SetTimer";
+import { WorkoutProgress } from "@/components/WorkoutProgress";
 import { GifDisplay } from "@/components/GifDisplay";
 import { getAthleteTodayWorkout, type AthleteWorkoutResponse } from "@/lib/api";
 import { formatSeconds } from "@/lib/utils";
@@ -17,8 +20,19 @@ import {
   type WorkoutDayPlan,
   type WorkoutExerciseItem,
   type WorkoutSessionState,
-  workoutFlowLabel,
 } from "@/lib/workout-plan";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronLeft,
+  Clock,
+  Dumbbell,
+  Play,
+  SkipForward,
+  Timer,
+  Trophy,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type WorkoutPointer = {
   phaseIndex: number;
@@ -31,101 +45,51 @@ function parseDayId(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value ?? "";
 }
 
-function startSetTimestamp(exercise: WorkoutExerciseItem, nowIso: string) {
-  return exercise.setMode === "time" ? nowIso : null;
-}
-
 function getElapsedSeconds(startedAt: string | null, now: number, stoppedAt: string | null = null) {
   const endPoint = stoppedAt ? new Date(stoppedAt).getTime() : now;
   return startedAt ? Math.max(0, Math.floor((endPoint - new Date(startedAt).getTime()) / 1000)) : 0;
 }
 
-function isExerciseActive(session: WorkoutSessionState, exerciseId: string) {
-  const progress = getExerciseProgress(session, exerciseId);
-  return !progress.completed && !progress.skipped;
+function findFirstActiveExercise(block: WorkoutBlock, session: WorkoutSessionState) {
+  return block.exercises.find((e) => {
+    const p = getExerciseProgress(session, e.id);
+    return !p.completed && !p.skipped;
+  }) ?? null;
 }
 
-function findFirstActiveExerciseIndex(block: WorkoutBlock, session: WorkoutSessionState) {
-  const index = block.exercises.findIndex((exercise) => isExerciseActive(session, exercise.id));
-  return index >= 0 ? index : null;
-}
+function findNextPointer(day: WorkoutDayPlan, session: WorkoutSessionState, from: WorkoutPointer): WorkoutPointer | null {
+  for (let pi = from.phaseIndex; pi < day.phases.length; pi++) {
+    const phase = day.phases[pi];
+    const startBlock = pi === from.phaseIndex ? from.blockIndex : 0;
 
-function findNextPointerAfterBlock(day: WorkoutDayPlan, phaseIndex: number, blockIndex: number, session: WorkoutSessionState): WorkoutPointer | null {
-  for (let nextPhaseIndex = phaseIndex; nextPhaseIndex < day.phases.length; nextPhaseIndex += 1) {
-    const phase = day.phases[nextPhaseIndex];
-    const startBlockIndex = nextPhaseIndex === phaseIndex ? blockIndex + 1 : 0;
+    for (let bi = startBlock; bi < phase.blocks.length; bi++) {
+      const block = phase.blocks[bi];
+      let startEi = pi === from.phaseIndex && bi === from.blockIndex ? from.exerciseIndex + 1 : 0;
 
-    for (let nextBlockIndex = startBlockIndex; nextBlockIndex < phase.blocks.length; nextBlockIndex += 1) {
-      const block = phase.blocks[nextBlockIndex];
-
-      if (block.kind === "exercise") {
-        const exercise = block.exercises[0];
-        if (exercise && isExerciseActive(session, exercise.id)) {
-          return { phaseIndex: nextPhaseIndex, blockIndex: nextBlockIndex, exerciseIndex: 0, roundIndex: 0 };
+      for (let ei = startEi; ei < block.exercises.length; ei++) {
+        const ex = block.exercises[ei];
+        const p = getExerciseProgress(session, ex.id);
+        if (!p.completed && !p.skipped) {
+          return { phaseIndex: pi, blockIndex: bi, exerciseIndex: ei, roundIndex: 0 };
         }
-        continue;
-      }
-
-      const childIndex = findFirstActiveExerciseIndex(block, session);
-      if (childIndex !== null) {
-        return { phaseIndex: nextPhaseIndex, blockIndex: nextBlockIndex, exerciseIndex: childIndex, roundIndex: 0 };
       }
     }
   }
-
   return null;
-}
-
-function findNextPointerWithinCompound(
-  day: WorkoutDayPlan,
-  session: WorkoutSessionState,
-  phaseIndex: number,
-  blockIndex: number,
-  exerciseIndex: number,
-  roundIndex: number,
-): WorkoutPointer | null {
-  const block = day.phases[phaseIndex]?.blocks[blockIndex];
-  if (!block || block.kind !== "compound") {
-    return null;
-  }
-
-  for (let nextExerciseIndex = exerciseIndex + 1; nextExerciseIndex < block.exercises.length; nextExerciseIndex += 1) {
-    const exercise = block.exercises[nextExerciseIndex];
-    if (isExerciseActive(session, exercise.id)) {
-      return { phaseIndex, blockIndex, exerciseIndex: nextExerciseIndex, roundIndex };
-    }
-  }
-
-  if (roundIndex + 1 < block.rounds) {
-    const nextRoundChildIndex = findFirstActiveExerciseIndex(block, session);
-    if (nextRoundChildIndex !== null) {
-      return { phaseIndex, blockIndex, exerciseIndex: nextRoundChildIndex, roundIndex: roundIndex + 1 };
-    }
-  }
-
-  return findNextPointerAfterBlock(day, phaseIndex, blockIndex, session);
-}
-
-function moveToPointer(session: WorkoutSessionState, day: WorkoutDayPlan, pointer: WorkoutPointer, nowIso: string) {
-  const exercise = day.phases[pointer.phaseIndex]?.blocks[pointer.blockIndex]?.exercises[pointer.exerciseIndex];
-  return {
-    ...session,
-    phaseIndex: pointer.phaseIndex,
-    blockIndex: pointer.blockIndex,
-    exerciseIndex: pointer.exerciseIndex,
-    roundIndex: pointer.roundIndex,
-    currentSetStartedAt: exercise ? startSetTimestamp(exercise, nowIso) : null,
-  };
 }
 
 export default function WorkoutPlayerPage() {
   const params = useParams<{ dayId?: string | string[] }>();
+  const router = useRouter();
   const dayId = parseDayId(params.dayId);
+
   const [day, setDay] = useState<WorkoutDayPlan | null>(null);
   const [programTitle, setProgramTitle] = useState<string | null>(null);
   const [session, setSession] = useState<WorkoutSessionState | null>(null);
   const [now, setNow] = useState(Date.now());
   const [ready, setReady] = useState(false);
+  const [showSetLogger, setShowSetLogger] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -138,13 +102,8 @@ export default function WorkoutPlayerPage() {
         const nextDay = data.days.find((item) => item.id === dayId) ?? null;
         setDay(nextDay);
         if (nextDay) {
-          const storedSession = getWorkoutSession(dayId);
-          setSession({
-            ...createSession(dayId),
-            ...storedSession,
-            dayId,
-            currentSetStartedAt: storedSession.currentSetStartedAt ?? null,
-          });
+          const stored = getWorkoutSession(dayId);
+          setSession({ ...createSession(dayId), ...stored, dayId });
         } else {
           setSession(null);
         }
@@ -152,15 +111,12 @@ export default function WorkoutPlayerPage() {
       })
       .catch(() => {
         if (!mounted) return;
-        setProgramTitle(null);
         setDay(null);
         setSession(null);
         setReady(true);
       });
 
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [dayId]);
 
   useEffect(() => {
@@ -169,9 +125,7 @@ export default function WorkoutPlayerPage() {
   }, []);
 
   useEffect(() => {
-    if (session) {
-      saveWorkoutSession(session);
-    }
+    if (session) saveWorkoutSession(session);
   }, [session]);
 
   const currentPhase = useMemo(() => {
@@ -195,176 +149,113 @@ export default function WorkoutPlayerPage() {
   }, [currentExercise, session]);
 
   const workoutElapsed = getElapsedSeconds(session?.startedAt ?? null, now, session?.finishedAt ?? null);
-  const setElapsed = getElapsedSeconds(session?.currentSetStartedAt ?? null, now, session?.finishedAt ?? null);
-  const activeDurationSeconds = currentExercise?.setMode === "time" ? currentExercise.durationSeconds ?? 0 : 0;
-  const setRemaining =
-    currentExercise?.setMode === "time" && currentExercise.durationSeconds
-      ? Math.max(0, currentExercise.durationSeconds - setElapsed)
-      : null;
+  const isRestPhase = showTimer && !showSetLogger;
 
-  const setReadyToFinish = Boolean(
-    currentExercise &&
-      currentProgress &&
-      currentProgress.setsDone >= currentExercise.sets &&
-      !currentProgress.completed &&
-      !currentProgress.skipped,
-  );
-
-  function updateSession(next: WorkoutSessionState) {
-    setSession(next);
+  function syncSession(next: WorkoutSessionState) {
+    setSession({ ...next });
   }
 
   function handleStartWorkout() {
-    if (!day || !session || session.startedAt) {
-      return;
-    }
-
+    if (!day || !session || session.startedAt) return;
     const nowIso = new Date().toISOString();
-    const firstPhase = day.phases[0];
-    const firstBlock = firstPhase?.blocks[0];
-    const firstExercise = firstBlock?.exercises[0] ?? null;
-    updateSession({
-      ...session,
-      startedAt: nowIso,
-      currentSetStartedAt: firstExercise ? startSetTimestamp(firstExercise, nowIso) : null,
-    });
+    syncSession({ ...session, startedAt: nowIso });
   }
 
-  function advanceFromCurrentPointer(baseSession: WorkoutSessionState) {
-    if (!day) {
-      return baseSession;
+  function advanceToNext(current: WorkoutSessionState) {
+    if (!day) return current;
+
+    const pointer: WorkoutPointer = {
+      phaseIndex: current.phaseIndex,
+      blockIndex: current.blockIndex,
+      exerciseIndex: current.exerciseIndex,
+      roundIndex: current.roundIndex,
+    };
+
+    const next = findNextPointer(day, current, pointer);
+
+    if (!next) {
+      return { ...current, finishedAt: new Date().toISOString() };
     }
 
-    const pointer = currentPhase && currentBlock && currentExercise
-      ? {
-          phaseIndex: baseSession.phaseIndex,
-          blockIndex: baseSession.blockIndex,
-          exerciseIndex: baseSession.exerciseIndex,
-          roundIndex: baseSession.roundIndex,
-        }
-      : null;
-
-    if (!pointer) {
-      return baseSession;
-    }
-
-    const nextPointer =
-      currentBlock?.kind === "compound"
-        ? findNextPointerWithinCompound(day, baseSession, pointer.phaseIndex, pointer.blockIndex, pointer.exerciseIndex, pointer.roundIndex)
-        : findNextPointerAfterBlock(day, pointer.phaseIndex, pointer.blockIndex, baseSession);
-
-    if (!nextPointer) {
-      return {
-        ...baseSession,
-        finishedAt: new Date().toISOString(),
-        currentSetStartedAt: null,
-      };
-    }
-
-    return moveToPointer(baseSession, day, nextPointer, new Date().toISOString());
+    return {
+      ...current,
+      phaseIndex: next.phaseIndex,
+      blockIndex: next.blockIndex,
+      exerciseIndex: next.exerciseIndex,
+      roundIndex: next.roundIndex,
+    };
   }
 
-  function handleDoneSet() {
-    if (!session || !currentExercise || !currentProgress || !day || !session.startedAt || session.finishedAt) {
-      return;
-    }
+  function handleLogSet(data: { weight?: number; reps?: number; rpe?: number; completed: boolean }) {
+    if (!session || !currentExercise || !currentProgress || !day || !session.startedAt || session.finishedAt) return;
 
-    const nowIso = new Date().toISOString();
     const nextSetsDone = Math.min(currentExercise.sets, currentProgress.setsDone + 1);
-    const nextProgressCompleted = nextSetsDone >= currentExercise.sets;
+    const completed = nextSetsDone >= currentExercise.sets;
 
-    const nextSession = {
+    const next: WorkoutSessionState = {
       ...session,
       completedExercises: {
         ...session.completedExercises,
         [currentExercise.id]: {
-          ...currentProgress,
           setsDone: nextSetsDone,
           skipped: false,
-          completed: nextProgressCompleted || currentProgress.completed,
+          completed: completed || currentProgress.completed,
         },
       },
     };
 
-    if (currentBlock?.kind === "compound") {
-      const nextPointer = findNextPointerWithinCompound(day, nextSession, session.phaseIndex, session.blockIndex, session.exerciseIndex, session.roundIndex);
-      updateSession(
-        nextPointer
-          ? moveToPointer(nextSession, day, nextPointer, nowIso)
-          : { ...nextSession, finishedAt: nowIso, currentSetStartedAt: null },
-      );
-      return;
+    setShowSetLogger(false);
+
+    if (completed) {
+      setShowTimer(true);
+      syncSession(advanceToNext(next));
+    } else {
+      setShowTimer(true);
+      syncSession(next);
     }
-
-    if (!nextProgressCompleted) {
-      updateSession({
-        ...nextSession,
-        currentSetStartedAt: currentExercise.setMode === "time" ? nowIso : null,
-      });
-      return;
-    }
-
-    updateSession(advanceFromCurrentPointer({
-      ...nextSession,
-      currentSetStartedAt: null,
-    }));
-  }
-
-  function handleDoneExercise() {
-    if (!session || !currentExercise || !currentProgress || !day || !session.startedAt || session.finishedAt) {
-      return;
-    }
-
-    const nextSession = {
-      ...session,
-      completedExercises: {
-        ...session.completedExercises,
-        [currentExercise.id]: {
-          ...currentProgress,
-          setsDone: currentExercise.sets,
-          skipped: false,
-          completed: true,
-        },
-      },
-      currentSetStartedAt: null,
-    };
-
-    updateSession(advanceFromCurrentPointer(nextSession));
   }
 
   function handleSkipExercise() {
-    if (!session || !currentExercise || !currentProgress || !day || !session.startedAt || session.finishedAt) {
-      return;
-    }
+    if (!session || !currentExercise || !currentProgress || !day || !session.startedAt || session.finishedAt) return;
 
-    const nextSession = {
+    const next: WorkoutSessionState = {
       ...session,
       completedExercises: {
         ...session.completedExercises,
-        [currentExercise.id]: {
-          ...currentProgress,
-          skipped: true,
-          completed: false,
-        },
+        [currentExercise.id]: { ...currentProgress, skipped: true, completed: false },
       },
-      currentSetStartedAt: null,
     };
 
-    updateSession(advanceFromCurrentPointer(nextSession));
+    setShowSetLogger(false);
+    setShowTimer(false);
+    syncSession(advanceToNext(next));
+  }
+
+  function handleTimerComplete() {
+    setShowTimer(false);
+  }
+
+  function handleTimerSkip() {
+    setShowTimer(false);
   }
 
   function handleReset() {
     if (!day) return;
     clearWorkoutSession(day.id);
-    const next = createSession(day.id);
-    setSession(next);
+    setSession(createSession(day.id));
+    setShowTimer(false);
+    setShowSetLogger(false);
   }
 
+  // --- Loading / Error states ---
   if (!ready) {
     return (
-      <AppShell title="اجرای تمرین" subtitle="در حال آماده‌سازی">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          در حال بارگذاری...
+      <AppShell title="تمرین" subtitle="در حال آماده‌سازی" hideNav>
+        <div className="flex h-[60vh] items-center justify-center">
+          <div className="flex flex-col items-center gap-3 text-[var(--text-muted)]">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            <span className="text-sm">در حال بارگذاری...</span>
+          </div>
         </div>
       </AppShell>
     );
@@ -372,29 +263,48 @@ export default function WorkoutPlayerPage() {
 
   if (!day) {
     return (
-      <AppShell title="اجرای تمرین" subtitle={programTitle ? `برنامه فعال: ${programTitle}` : "روز مورد نظر پیدا نشد"}>
-        <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-sm text-slate-500 dark:text-slate-300">این روز تمرین در برنامه فعلی پیدا نشد.</p>
-          <Link href="/athlete/workout" className="mt-4 inline-flex rounded-lg bg-primary px-5 py-3 font-black text-white">
-            بازگشت به انتخاب روز
+      <AppShell title="تمرین" subtitle="روز مورد نظر پیدا نشد" hideNav>
+        <div className="flex h-[60vh] flex-col items-center justify-center gap-4">
+          <p className="text-[var(--text-secondary)]">این روز تمرین در برنامه فعلی پیدا نشد.</p>
+          <Link
+            href="/athlete/workout"
+            className="rounded-xl bg-primary px-6 py-3 font-black text-white shadow-card transition-all active:scale-[0.98]"
+          >
+            بازگشت به تمرینات
           </Link>
         </div>
       </AppShell>
     );
   }
 
+  // --- Finished ---
   if (session?.finishedAt) {
     return (
-      <AppShell title={day.title} subtitle="تمرین کامل شد">
-        <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-6">
-          <h2 className="text-2xl font-black">آفرین، این جلسه کامل شد.</h2>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">زمان کل: {formatSeconds(workoutElapsed)}</p>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button type="button" onClick={handleReset} className="rounded-lg bg-primary px-5 py-3 font-black text-white">
+      <AppShell title={day.title} subtitle="تمرین کامل شد" hideNav>
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-secondary/10">
+            <Trophy size={40} className="text-secondary" />
+          </div>
+          <h2 className="text-3xl font-black">آفرین!</h2>
+          <p className="mt-2 text-[var(--text-secondary)]">این جلسه با موفقیت انجام شد</p>
+          <div className="mt-6 flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-6 py-4">
+            <Clock size={18} className="text-primary" />
+            <span className="font-bold">زمان کل تمرین: {formatSeconds(workoutElapsed)}</span>
+          </div>
+
+          <div className="mt-8 flex gap-3">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="rounded-xl bg-primary px-6 py-3 font-black text-white shadow-card transition-all active:scale-[0.98]"
+            >
               شروع دوباره
             </button>
-            <Link href="/athlete/workout" className="rounded-lg bg-slate-100 px-5 py-3 font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              انتخاب روز دیگر
+            <Link
+              href="/athlete/workout"
+              className="rounded-xl border border-[var(--border)] px-6 py-3 font-bold text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)]"
+            >
+              بازگشت
             </Link>
           </div>
         </div>
@@ -402,29 +312,40 @@ export default function WorkoutPlayerPage() {
     );
   }
 
+  // --- Pre-start ---
   if (!session?.startedAt) {
     return (
-      <AppShell title={day.title} subtitle={day.summary}>
-        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+      <AppShell title={day.title} subtitle={day.summary} hideNav>
+        <div className="mx-auto max-w-lg">
+          {/* Day Overview */}
+          <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-card">
             <h2 className="text-2xl font-black">{day.label}</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">{day.summary}</p>
-            <div className="mt-4 space-y-3">
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{day.summary}</p>
+
+            <div className="mt-5 space-y-3">
               {day.phases.map((phase) => (
-                <div key={phase.id} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
-                  <div className="flex items-center justify-between gap-3">
+                <div key={phase.id} className="rounded-xl bg-[var(--background)] p-3">
+                  <div className="flex items-center justify-between">
                     <span className="font-bold">{phase.title}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-300">{phase.blocks.length} بلوک</span>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {phase.blocks.reduce((s, b) => s + b.exercises.length, 0)} حرکت
+                    </span>
                   </div>
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-2 space-y-1">
                     {phase.blocks.map((block) => (
-                      <div key={block.id} className="rounded-md bg-white px-3 py-2 dark:bg-slate-900">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-medium">{block.kind === "compound" ? block.title : block.exercises[0]?.exerciseName ?? "نامشخص"}</span>
-                          <span className="text-xs text-slate-500 dark:text-slate-300">
-                            {workoutFlowLabel(block.flowType)} • {block.exercises.length} حرکت • {block.rounds} دور
+                      <div
+                        key={block.id}
+                        className="flex items-center justify-between rounded-lg bg-[var(--surface)] px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Dumbbell size={14} className="shrink-0 text-[var(--text-muted)]" />
+                          <span className="truncate text-sm font-medium">
+                            {block.kind === "compound" ? block.title : block.exercises[0]?.exerciseName ?? "—"}
                           </span>
                         </div>
+                        <span className="shrink-0 text-xs text-[var(--text-muted)]">
+                          {block.exercises.length} حرکت • {block.rounds} دور
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -432,201 +353,149 @@ export default function WorkoutPlayerPage() {
               ))}
             </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <h2 className="text-xl font-black">آماده شروع</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">بعد از شروع، تایمر کل تمرین و هر ست فعال می‌شود و در ریلود هم از همین‌جا ادامه می‌دهد.</p>
-            <button type="button" onClick={handleStartWorkout} className="mt-5 w-full rounded-lg bg-primary px-5 py-3 font-black text-white">
-              شروع تمرین
-            </button>
-            <div className="mt-4 rounded-lg bg-slate-50 p-4 text-sm dark:bg-slate-800">
-              <p>زمان کل تا الان: {formatSeconds(workoutElapsed)}</p>
-              <p className="mt-1">پیشرفت جلسه در localStorage ذخیره می‌شود.</p>
-            </div>
-          </div>
+
+          {/* Start Button */}
+          <button
+            type="button"
+            onClick={handleStartWorkout}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-primary py-5 text-lg font-black text-white shadow-float transition-all duration-200 active:scale-[0.98]"
+          >
+            <Play size={24} fill="white" />
+            شروع تمرین
+          </button>
         </div>
       </AppShell>
     );
   }
 
+  // --- Active Workout ---
   return (
-    <AppShell title={day.title} subtitle={programTitle ? `${programTitle} • ${day.summary}` : day.summary}>
-      <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-300">تایمر کل تمرین</p>
-                <strong className="mt-1 block text-3xl font-black sm:text-4xl">{formatSeconds(workoutElapsed)}</strong>
-              </div>
-              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-black text-primary">
-                {currentBlock ? workoutFlowLabel(currentBlock.flowType) : "در حال اجرا"}
-              </span>
-            </div>
-          </div>
+    <AppShell title="" subtitle="" hideNav>
+      {/* Set Logger Bottom Sheet */}
+      {showSetLogger && currentExercise && (
+        <SetLogger
+          exerciseName={currentExercise.exerciseName}
+          setNumber={(currentProgress?.setsDone ?? 0) + 1}
+          totalSets={currentExercise.sets}
+          setMode={currentExercise.setMode}
+          repsRange={currentExercise.repsRange}
+          onLog={handleLogSet}
+          onSkip={handleSkipExercise}
+          onClose={() => setShowSetLogger(false)}
+        />
+      )}
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <p className="text-sm font-bold text-slate-500 dark:text-slate-300">فاز</p>
-            <h2 className="mt-1 text-2xl font-black">{currentPhase?.title ?? "فاز نامشخص"}</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-              {currentPhase ? `${currentPhase.blocks.length} بلوک تمرینی` : "فاز فعال پیدا نشد."}
-            </p>
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <p className="text-sm font-bold text-slate-500 dark:text-slate-300">بلوک فعال</p>
-            <h3 className="mt-1 text-2xl font-black">{currentExercise?.exerciseName ?? "حرکتی برای نمایش نیست"}</h3>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-              {currentBlock ? `${workoutFlowLabel(currentBlock.flowType)} • ${currentBlock.exercises.length} حرکت` : ""}
-            </p>
-            {currentBlock?.kind === "compound" ? (
-              <p className="mt-2 text-xs font-bold text-primary">
-                کمپوند: {currentBlock.title}
-              </p>
-            ) : null}
-
-            {currentBlock?.kind === "compound" ? (
-              <div className="mt-4 rounded-lg bg-primary p-4 text-white sm:p-5">
-                <p className="text-sm font-bold opacity-80">دور کمپوند</p>
-                <strong className="mt-2 block text-4xl font-black sm:text-5xl">
-                  {session.roundIndex + 1} / {currentBlock.rounds}
-                </strong>
-                <p className="mt-2 text-sm opacity-85">
-                  حرکت {session.exerciseIndex + 1} از {currentBlock.exercises.length}
-                </p>
-              </div>
-            ) : null}
-
-            {currentExercise ? (
-              <div className={`mt-4 rounded-lg ${currentExercise.setMode === "time" ? "bg-primary p-4 text-white sm:p-5" : "bg-slate-50 p-4 dark:bg-slate-800"}`}>
-                <p className={`text-sm font-bold ${currentExercise.setMode === "time" ? "opacity-80" : "text-slate-500 dark:text-slate-300"}`}>
-                  {currentExercise.setMode === "time" ? "تایمر ست" : "هدف تکرار"}
-                </p>
-                <strong className={`mt-2 block ${currentExercise.setMode === "time" ? "text-4xl sm:text-5xl" : "text-2xl"} font-black`}>
-                  {currentExercise.setMode === "time" ? formatSeconds(setRemaining ?? activeDurationSeconds) : currentExercise.repsRange ?? "—"}
-                </strong>
-                <p className={`mt-2 text-sm ${currentExercise.setMode === "time" ? "opacity-85" : "text-slate-500 dark:text-slate-300"}`}>
-                  {currentBlock?.kind === "compound"
-                    ? `دور ${session.roundIndex + 1} از ${currentBlock.rounds}`
-                    : `ست ${Math.min((currentProgress?.setsDone ?? 0) + 1, currentExercise.sets)} از ${currentExercise.sets}`}
-                </p>
-              </div>
-            ) : null}
-
-            {currentExercise?.gifMediaId ? (
-              <GifDisplay
-                mediaId={currentExercise.gifMediaId}
-                alt={currentExercise.exerciseName}
-                title="حرکت"
-                caption="پیش‌نمایش حرکت فعلی"
-                className="mt-4"
-                frameClassName="h-48 w-full"
-                imageClassName="h-48 w-full object-cover"
-              />
-            ) : null}
-          </div>
+      <div className="mx-auto flex max-w-lg flex-col gap-4 px-0 py-0">
+        {/* Minimal header */}
+        <div className="flex items-center justify-between px-4 pt-3">
+          <button
+            type="button"
+            onClick={() => router.push("/athlete/workout")}
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)]"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <span className="text-sm font-medium text-[var(--text-muted)]">
+            <Timer size={14} className="inline ml-1" />
+            {formatSeconds(workoutElapsed)}
+          </span>
+          <div className="h-10 w-10" /> {/* spacer */}
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <h2 className="text-xl font-black">کنترل تمرین</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-              {currentProgress?.skipped
-                ? "این حرکت رد شده است."
-                : setReadyToFinish
-                  ? "این حرکت کامل شده و می‌توانی به بعدی بروی."
-                  : "ست فعلی را انجام بده و بعد تصمیم بگیر حرکت را تمام کنی یا رد کنی."}
-            </p>
+        {isRestPhase ? (
+          /* --- Rest Timer View --- */
+          <div className="flex flex-col items-center px-4 py-8">
+            <SetTimer
+              key={`timer-${currentExercise?.id}-${currentProgress?.setsDone}`}
+              durationSeconds={currentExercise?.restSeconds ?? 60}
+              onComplete={handleTimerComplete}
+              onSkip={handleTimerSkip}
+              autoStart
+            />
+            <button
+              type="button"
+              onClick={() => setShowSetLogger(true)}
+              className="mt-6 w-full rounded-2xl bg-primary py-4 text-center font-black text-white shadow-card transition-all active:scale-[0.98]"
+            >
+              شروع ست بعدی
+            </button>
+          </div>
+        ) : (
+          /* --- Exercise View --- */
+          <div className="flex flex-col gap-4 px-4">
+            {/* Exercise Card */}
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-card">
+              {/* Phase & Block context */}
+              <div className="mb-3 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                <span className="rounded-md bg-primary/10 px-2 py-0.5 font-medium text-primary">
+                  {currentPhase?.title}
+                </span>
+                <span>•</span>
+                <span>حرکت {day.phases.reduce((s, p, i) => s + (i < session.phaseIndex ? p.blocks.reduce((a, b) => a + b.exercises.length, 0) : 0), 0) + session.exerciseIndex + 1} از {day.phases.reduce((s, p) => s + p.blocks.reduce((a, b) => a + b.exercises.length, 0), 0)}</span>
+              </div>
 
-            <div className="mt-5 grid gap-3">
+              {/* Exercise Name + Set info */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-2xl font-black">{currentExercise?.exerciseName ?? "—"}</h2>
+                  {currentExercise?.repsRange && (
+                    <p className="mt-1 text-sm text-[var(--text-secondary)]">هدف: {currentExercise.repsRange} تکرار</p>
+                  )}
+                </div>
+                <div className="shrink-0 text-center">
+                  <span className="block text-3xl font-black text-primary tabular-nums">
+                    {(currentProgress?.setsDone ?? 0) + 1}
+                  </span>
+                  <span className="text-xs text-[var(--text-muted)]">از {currentExercise?.sets ?? 0}</span>
+                </div>
+              </div>
+
+              {/* GIF */}
+              {currentExercise?.gifMediaId && (
+                <div className="mt-4">
+                  <GifDisplay
+                    mediaId={currentExercise.gifMediaId}
+                    alt={currentExercise.exerciseName}
+                    frameClassName="h-52 w-full rounded-xl"
+                    imageClassName="h-full w-full object-cover"
+                  />
+                </div>
+              )}
+
+              {/* Primary action */}
               <button
                 type="button"
-                onClick={handleDoneSet}
-                disabled={!session?.startedAt || !currentExercise || Boolean(session?.finishedAt) || Boolean(currentProgress?.skipped)}
-                className="rounded-lg bg-success px-4 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => setShowSetLogger(true)}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-4 text-lg font-black text-white shadow-card transition-all duration-200 active:scale-[0.98]"
               >
-                ست انجام شد
+                <Play size={20} fill="white" />
+                انجام ست {Math.min((currentProgress?.setsDone ?? 0) + 1, currentExercise?.sets ?? 0)}
               </button>
-              <button
-                type="button"
-                onClick={handleDoneExercise}
-                disabled={!session?.startedAt || !currentExercise || Boolean(session?.finishedAt)}
-                className="rounded-lg bg-primary px-4 py-3 font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                done
-              </button>
+
+              {/* Skip */}
               <button
                 type="button"
                 onClick={handleSkipExercise}
-                disabled={!session?.startedAt || !currentExercise || Boolean(session?.finishedAt)}
-                className="rounded-lg bg-danger/10 px-4 py-3 font-black text-danger disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] py-3 text-sm font-bold text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-hover)]"
               >
-                skip exercise
+                <SkipForward size={16} />
+                رد کردن این حرکت
               </button>
             </div>
-          </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
-            <h3 className="text-lg font-black">پیشرفت جلسه</h3>
-            <div className="mt-4 space-y-3">
-              {day.phases.map((phase, phaseIndex) => (
-                <div key={phase.id} className="rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-bold">{phase.title}</p>
-                    <span className="text-xs text-slate-500 dark:text-slate-300">{phase.blocks.length} بلوک</span>
-                  </div>
-                  <div className="mt-3 space-y-3 text-sm">
-                    {phase.blocks.map((block, blockIndex) => (
-                      <div key={block.id} className="rounded-lg bg-white px-3 py-2 dark:bg-slate-900">
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <p className="font-medium">{block.kind === "compound" ? block.title : block.exercises[0]?.exerciseName ?? "نامشخص"}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-300">
-                              {workoutFlowLabel(block.flowType)} • {block.exercises.length} حرکت • {block.rounds} دور
-                            </p>
-                          </div>
-                          <span className="text-xs text-slate-500 dark:text-slate-300">
-                            {phaseIndex === session?.phaseIndex && blockIndex === session?.blockIndex ? "فعال" : "آینده"}
-                          </span>
-                        </div>
-                        <div className="mt-3 space-y-2">
-                          {block.exercises.map((exercise, exerciseIndex) => {
-                            const progress = session ? getExerciseProgress(session, exercise.id) : null;
-                            const isActive = phaseIndex === session?.phaseIndex && blockIndex === session?.blockIndex && exerciseIndex === session?.exerciseIndex;
-                            return (
-                              <div
-                                key={exercise.id}
-                                className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-                                  isActive ? "bg-primary/10 text-primary" : "bg-slate-50 dark:bg-slate-800"
-                                }`}
-                              >
-                                <span className="font-medium">{exercise.exerciseName}</span>
-                            <span className="text-xs">
-                              {progress?.skipped
-                                ? "رد شده"
-                                : progress?.completed
-                                  ? "انجام شد"
-                                  : `${progress?.setsDone ?? 0}/${exercise.sets} ${block.kind === "compound" ? "دور" : "ست"}`}
-                            </span>
-                          </div>
-                        );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button type="button" onClick={handleReset} className="mt-4 w-full rounded-lg border border-slate-200 px-4 py-3 font-black dark:border-slate-800">
+            {/* Progress */}
+            <WorkoutProgress day={day} session={session} />
+
+            {/* Reset */}
+            <button
+              type="button"
+              onClick={handleReset}
+              className="mb-4 text-center text-xs text-[var(--text-muted)] underline underline-offset-2 hover:text-danger"
+            >
               ریست جلسه
             </button>
           </div>
-        </aside>
-      </div>
-      <div className="mt-5">
-        <Link href="/athlete/workout" className="inline-flex rounded-lg bg-slate-100 px-5 py-3 font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-          انتخاب روز دیگر
-        </Link>
+        )}
       </div>
     </AppShell>
   );

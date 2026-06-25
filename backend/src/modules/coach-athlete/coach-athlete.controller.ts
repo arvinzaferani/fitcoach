@@ -28,6 +28,12 @@ export class CoachAthleteController {
   }
 
   @Roles("athlete")
+  @Get("athlete/:athleteId/coaches")
+  athleteCoaches(@CurrentUser() user: AuthenticatedUser, @Param("athleteId") athleteId: string) {
+    return this.coachAthleteService.listAthleteCoaches(user.sub === athleteId ? athleteId : user.sub);
+  }
+
+  @Roles("athlete")
   @Post("accept")
   acceptInvitation(@CurrentUser() user: AuthenticatedUser, @Body() dto: AcceptInvitationDto) {
     return this.coachAthleteService.acceptInvitation({ ...dto, athleteId: user.sub });

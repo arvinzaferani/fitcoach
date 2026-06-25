@@ -107,6 +107,23 @@ export function getWorkoutSession(dayId: string): WorkoutSessionState {
   }
 }
 
+export function getStoredWorkoutSessions() {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  return Object.keys(window.localStorage)
+    .filter((key) => key.startsWith(`${SESSION_PREFIX}:`))
+    .map((key) => {
+      try {
+        return JSON.parse(window.localStorage.getItem(key) ?? "") as WorkoutSessionState;
+      } catch {
+        return null;
+      }
+    })
+    .filter((session): session is WorkoutSessionState => Boolean(session?.dayId));
+}
+
 export function saveWorkoutSession(session: WorkoutSessionState) {
   if (typeof window === "undefined") {
     return;

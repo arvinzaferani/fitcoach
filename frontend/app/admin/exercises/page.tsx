@@ -1,411 +1,345 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { ImageIcon, Plus, Search, X } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
-import { FileUploader } from "@/components/FileUploader";
 import { GifDisplay } from "@/components/GifDisplay";
+import { cn } from "@/lib/utils";
 import {
   CatalogExercise,
-  MAX_EXERCISE_GIF_BYTES,
-  createExercise,
   deactivateExercise,
-  deleteExerciseGifMedia,
   getAdminExerciseCatalog,
   getExerciseGroups,
-  updateExercise,
-  uploadExerciseGif,
 } from "@/lib/exercise-catalog";
 
 const DEFAULT_GROUPS = ["Cardio", "Lower Body", "Upper Body", "Mobility", "Core"];
+const DEFAULT_MUSCLE_GROUPS = [
+  "سینه", "پشت", "سرشانه", "جلو بازو", "پشت بازو",
+  "چهارسر ران", "همسترینگ", "ساق پا", "شکم", "باسن", "فیله کمری", "کمر",
+];
+const PAGE_SIZE = 10;
 
-export default function AdminExercisesPage() {
+function getPageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i);
+
+  const pages: (number | "...")[] = [];
+  pages.push(0);
+
+  if (current > 2) pages.push("...");
+
+  const start = Math.max(1, current - 1);
+  const end = Math.min(total - 2, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+
+  if (current < total - 3) pages.push("...");
+
+  pages.push(total - 1);
+  return pages;
+}
+
+type Notice = { text: string; type: "success" | "error" } | null;
+
+export default function ExercisesCatalogPage() {
   const [exercises, setExercises] = useState<CatalogExercise[]>([]);
-  const [name, setName] = useState("");
-  const [nameEn, setNameEn] = useState("");
-  const [muscleGroup, setMuscleGroup] = useState("");
-  const [group, setGroup] = useState("Cardio");
-  const [customGroup, setCustomGroup] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [filterGroup, setFilterGroup] = useState("all");
-  const [gifFile, setGifFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [stagedMediaId, setStagedMediaId] = useState<string | null>(null);
-  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(null);
-  const [editingOriginalMediaId, setEditingOriginalMediaId] = useState<string | null>(null);
-  const [gifUploading, setGifUploading] = useState(false);
-  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [filterMuscle, setFilterMuscle] = useState("all");
+  const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [previewExercise, setPreviewExercise] = useState<CatalogExercise | null>(null);
 
   useEffect(() => {
     let active = true;
-
-    async function loadExercises() {
-      setLoading(true);
-      try {
-        const data = await getAdminExerciseCatalog();
-        if (active) {
-          setExercises(data);
-        }
-      } catch {
-        if (active) {
-          setSaveNotice("بارگذاری کتابخانه حرکات ناموفق بود.");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadExercises();
-    return () => {
-      active = false;
-    };
+    setLoading(true);
+    getAdminExerciseCatalog()
+      .then((data) => { if (active) setExercises(data); })
+      .catch(() => { if (active) setNotice({ text: "بارگذاری ناموفق بود.", type: "error" }); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
-  const groupOptions = useMemo(() => {
-    return Array.from(new Set([...DEFAULT_GROUPS, ...getExerciseGroups(exercises)])).sort((left, right) => left.localeCompare(right));
+  const muscleGroupOptions = useMemo(() => {
+    const fromExercises = exercises.map((e) => e.muscleGroup?.trim()).filter(Boolean) as string[];
+    return Array.from(new Set([...DEFAULT_MUSCLE_GROUPS, ...fromExercises])).sort();
   }, [exercises]);
 
-  const filteredExercises = filterGroup === "all" ? exercises : exercises.filter((exercise) => exercise.group === filterGroup);
-  const isEditing = editingExerciseId !== null;
+  const groupOptions = useMemo(() => {
+    return Array.from(new Set([...DEFAULT_GROUPS, ...getExerciseGroups(exercises)])).sort();
+  }, [exercises]);
 
-  useEffect(() => {
-    return () => {
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [previewUrl]);
-
-  function clearPreviewUrl() {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
+  const filteredExercises = useMemo(() => {
+    let result = exercises;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(
+        (e) => e.name.toLowerCase().includes(q) || (e.nameEn?.toLowerCase().includes(q) ?? false),
+      );
     }
-    setPreviewUrl(null);
+    if (filterGroup !== "all") {
+      result = result.filter((e) => e.group === filterGroup);
+    }
+    if (filterMuscle !== "all") {
+      result = result.filter((e) => e.muscleGroup === filterMuscle);
+    }
+    return result;
+  }, [exercises, searchQuery, filterGroup, filterMuscle]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredExercises.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageItems = filteredExercises.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  function getNoticeStyle(type: "success" | "error") {
+    switch (type) {
+      case "success":
+        return "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200";
+      case "error":
+        return "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200";
+    }
   }
 
-  async function discardStagedMedia() {
-    if (stagedMediaId && stagedMediaId !== editingOriginalMediaId) {
-      await deleteExerciseGifMedia(stagedMediaId).catch(() => undefined);
-    }
-  }
-
-  function resolveGroupValue(exerciseGroup?: string | null) {
-    const value = exerciseGroup?.trim() || "General";
-    return groupOptions.includes(value) ? value : "__custom__";
-  }
-
-  async function beginEditExercise(exercise: CatalogExercise) {
-    await discardStagedMedia();
-    clearPreviewUrl();
-    setEditingExerciseId(exercise.id);
-    setEditingOriginalMediaId(exercise.gifMediaId ?? null);
-    setName(exercise.name ?? "");
-    setNameEn(exercise.nameEn ?? "");
-    setMuscleGroup(exercise.muscleGroup ?? "");
-    setGroup(resolveGroupValue(exercise.group));
-    setCustomGroup(groupOptions.includes(exercise.group?.trim() || "") ? "" : exercise.group ?? "");
-    setGifFile(null);
-    setStagedMediaId(null);
-    setSaveNotice("حالت ویرایش فعال شد.");
-  }
-
-  async function cancelEditExercise() {
-    await discardStagedMedia();
-    setEditingExerciseId(null);
-    setEditingOriginalMediaId(null);
-    setName("");
-    setNameEn("");
-    setMuscleGroup("");
-    setGroup("Cardio");
-    setCustomGroup("");
-    setGifFile(null);
-    setStagedMediaId(null);
-    clearPreviewUrl();
-    setSaveNotice("ویرایش لغو شد.");
-  }
-
-  async function handleGifUpload(file: File | null) {
-    if (gifUploading) {
-      return;
-    }
-
-    if (!file) {
-      if (stagedMediaId && stagedMediaId !== editingOriginalMediaId) {
-        await deleteExerciseGifMedia(stagedMediaId).catch(() => undefined);
-      }
-      setGifFile(null);
-      setStagedMediaId(null);
-      clearPreviewUrl();
-      return;
-    }
-
-    if (file.size > MAX_EXERCISE_GIF_BYTES) {
-      if (stagedMediaId && stagedMediaId !== editingOriginalMediaId) {
-        await deleteExerciseGifMedia(stagedMediaId).catch(() => undefined);
-      }
-      setGifFile(null);
-      setStagedMediaId(null);
-      clearPreviewUrl();
-      setSaveNotice(`GIF باید کوچکتر از ${Math.ceil(MAX_EXERCISE_GIF_BYTES / 1024 / 1024)}MB باشد.`);
-      return;
-    }
-
-    if (file.type && file.type !== "image/gif") {
-      if (stagedMediaId && stagedMediaId !== editingOriginalMediaId) {
-        await deleteExerciseGifMedia(stagedMediaId).catch(() => undefined);
-      }
-      setGifFile(null);
-      setStagedMediaId(null);
-      clearPreviewUrl();
-      setSaveNotice("فقط فایل GIF قابل قبول است.");
-      return;
-    }
-
-    clearPreviewUrl();
-    setGifFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-    setSaveNotice(null);
-    setGifUploading(true);
-    const previousMediaId = stagedMediaId;
-
+  async function handleDeactivate(exercise: CatalogExercise) {
+    if (!window.confirm(`آیا از غیرفعال‌سازی "${exercise.name}" اطمینان دارید؟`)) return;
+    setSavingId(exercise.id);
+    setNotice(null);
     try {
-      const upload = await uploadExerciseGif(file);
-      if (previousMediaId && previousMediaId !== editingOriginalMediaId) {
-        await deleteExerciseGifMedia(previousMediaId).catch(() => undefined);
-      }
-      setStagedMediaId(upload.mediaId);
-      setSaveNotice("GIF با موفقیت آپلود شد و برای ذخیره آماده است.");
+      const updated = await deactivateExercise(exercise.id);
+      setExercises((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      setNotice({ text: `"${exercise.name}" غیرفعال شد.`, type: "success" });
     } catch (error) {
-      setStagedMediaId(previousMediaId);
-      setSaveNotice(error instanceof Error ? error.message : "آپلود GIF ناموفق بود.");
+      setNotice({ text: error instanceof Error ? error.message : "غیرفعال‌سازی ناموفق بود.", type: "error" });
     } finally {
-      setGifUploading(false);
-    }
-  }
-
-  async function handleSaveExercise(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const trimmedName = name.trim();
-    const trimmedMuscle = muscleGroup.trim();
-    const trimmedCustomGroup = customGroup.trim();
-    const trimmedGroup = (group === "__custom__" ? trimmedCustomGroup : group).trim() || "General";
-
-    if (!trimmedName || !trimmedMuscle || (!gifFile && !isEditing)) {
-      setSaveNotice("نام و گروه عضلانی الزامی هستند و برای حرکت جدید GIF هم لازم است.");
-      return;
-    }
-
-    if (group === "__custom__" && !trimmedCustomGroup) {
-      setSaveNotice("برای گروه سفارشی، نام گروه را وارد کنید.");
-      return;
-    }
-
-    const finalMediaId = stagedMediaId ?? editingOriginalMediaId ?? null;
-    if (!finalMediaId && !isEditing) {
-      setSaveNotice(gifUploading ? "GIF هنوز در حال آپلود است." : "GIF هنوز آپلود نشده است.");
-      return;
-    }
-
-    setSaving(true);
-    setSaveNotice(null);
-
-    try {
-      if (editingExerciseId) {
-        const updatedExercise = await updateExercise(editingExerciseId, {
-          name: trimmedName,
-          nameEn: nameEn.trim() || undefined,
-          muscleGroup: trimmedMuscle,
-          group: trimmedGroup,
-          gifMediaId: finalMediaId ?? undefined,
-        });
-
-        if (stagedMediaId && editingOriginalMediaId && stagedMediaId !== editingOriginalMediaId) {
-          await deleteExerciseGifMedia(editingOriginalMediaId).catch(() => undefined);
-        }
-
-        setExercises((current) => current.map((exercise) => (exercise.id === updatedExercise.id ? updatedExercise : exercise)));
-        setSaveNotice("حرکت با موفقیت به‌روزرسانی شد.");
-      } else {
-        const createdExercise = await createExercise({
-          name: trimmedName,
-          nameEn: nameEn.trim() || undefined,
-          muscleGroup: trimmedMuscle,
-          group: trimmedGroup,
-          gifMediaId: finalMediaId ?? undefined,
-        });
-
-        setExercises((current) => [createdExercise, ...current.filter((exercise) => exercise.id !== createdExercise.id)]);
-        setSaveNotice("حرکت با موفقیت در MinIO و دیتابیس ذخیره شد.");
-      }
-
-      setEditingExerciseId(null);
-      setEditingOriginalMediaId(null);
-      setName("");
-      setNameEn("");
-      setMuscleGroup("");
-      setGroup("Cardio");
-      setCustomGroup("");
-      setGifFile(null);
-      setStagedMediaId(null);
-      clearPreviewUrl();
-      event.currentTarget.reset();
-    } catch (error) {
-      setSaveNotice(error instanceof Error ? error.message : "ذخیره حرکت ناموفق بود.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDeactivate(id: string) {
-    setSaving(true);
-    setSaveNotice(null);
-
-    try {
-      const updatedExercise = await deactivateExercise(id);
-      setExercises((current) => current.map((exercise) => (exercise.id === updatedExercise.id ? updatedExercise : exercise)));
-      setSaveNotice("حرکت غیرفعال شد.");
-    } catch (error) {
-      setSaveNotice(error instanceof Error ? error.message : "غیرفعال‌سازی ناموفق بود.");
-    } finally {
-      setSaving(false);
+      setSavingId(null);
     }
   }
 
   return (
-    <AppShell title="مدیریت حرکات" subtitle="CRUD حرکات، آپلود مستقیم GIF و مدیریت دسته‌بندی">
-      <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="space-y-4">
-          <form onSubmit={handleSaveExercise} className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-black">{isEditing ? "ویرایش حرکت" : "افزودن حرکت"}</h2>
-              {isEditing ? (
-                <button type="button" onClick={cancelEditExercise} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                  لغو ویرایش
-                </button>
-              ) : null}
-            </div>
-            {saveNotice ? <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{saveNotice}</p> : null}
-            <div className="mt-4 grid gap-3">
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="نام حرکت (مثلا تردمیل)" className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-800" />
-              <input value={nameEn} onChange={(event) => setNameEn(event.target.value)} placeholder="English name (optional)" className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-800" />
-              <input value={muscleGroup} onChange={(event) => setMuscleGroup(event.target.value)} placeholder="گروه عضلانی (مثلا پا)" className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-800" />
-              <div className="grid gap-2">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-200">گروه نمایش</label>
-                <select value={group} onChange={(event) => setGroup(event.target.value)} className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-800">
-                  {groupOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-                  <option value="__custom__">سفارشی</option>
-                </select>
-                {group === "__custom__" ? (
-                  <input value={customGroup} onChange={(event) => setCustomGroup(event.target.value)} placeholder="نام گروه سفارشی" className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-800" />
-                ) : null}
-              </div>
-              <FileUploader
-                id="exercise-gif"
-                label="GIF حرکت"
-                accept="image/gif"
-                helpText={`فایل GIF را انتخاب کنید. حداکثر حجم ${Math.ceil(MAX_EXERCISE_GIF_BYTES / 1024 / 1024)}MB است.`}
-                file={gifFile}
-                maxSizeBytes={MAX_EXERCISE_GIF_BYTES}
-                disabled={saving || gifUploading}
-                onChange={handleGifUpload}
-              />
-              {gifUploading ? <p className="text-xs text-slate-500 dark:text-slate-300">در حال آپلود GIF...</p> : null}
-              {previewUrl ? (
-                <GifDisplay
-                  src={previewUrl}
-                  alt={name.trim() || "پیش‌نمایش GIF"}
-                  title="پیش‌نمایش قبل از آپلود"
-                  caption="این همان فایلی است که به MinIO ارسال می‌شود."
-                  className="mt-1"
-                  frameClassName="h-40 w-full"
-                  imageClassName="h-40 w-full object-cover"
-                />
-              ) : null}
-              {stagedMediaId ? (
-                <GifDisplay
-                  mediaId={stagedMediaId}
-                  alt={name.trim() || "GIF آپلود شده"}
-                  title="نمونه بعد از آپلود"
-                  caption="نسخه ذخیره شده در MinIO و دیتابیس."
-                  className="mt-1"
-                  frameClassName="h-40 w-full"
-                  imageClassName="h-40 w-full object-cover"
-                />
-              ) : isEditing && editingOriginalMediaId ? (
-                <GifDisplay
-                  mediaId={editingOriginalMediaId}
-                  alt={name.trim() || "GIF فعلی"}
-                  title="GIF فعلی"
-                  caption="نسخه‌ای که الان به حرکت وصل است."
-                  className="mt-1"
-                  frameClassName="h-40 w-full"
-                  imageClassName="h-40 w-full object-cover"
-                />
-              ) : null}
-            </div>
-            <button type="submit" disabled={saving || gifUploading} className="mt-4 w-full rounded-lg bg-primary py-3 font-black text-white disabled:opacity-60">
-              {saving ? "در حال ذخیره..." : isEditing ? "ذخیره تغییرات" : "ذخیره حرکت"}
-            </button>
-          </form>
+    <AppShell title="مدیریت حرکات" subtitle="کتابخانه حرکات ورزشی">
+      {/* Notice */}
+      {notice ? (
+        <p className={cn("mb-4 rounded-lg border px-3 py-2 text-sm", getNoticeStyle(notice.type))}>{notice.text}</p>
+      ) : null}
+
+      {/* Actions bar */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
+              placeholder="جستجوی حرکت..."
+              className="w-full rounded-lg border border-slate-200 bg-transparent px-4 py-2.5 pr-9 text-sm dark:border-slate-800"
+            />
+          </div>
+          <select
+            value={filterGroup}
+            onChange={(e) => { setFilterGroup(e.target.value); setPage(0); }}
+            className="rounded-lg border border-slate-200 bg-transparent px-3 py-2.5 text-sm dark:border-slate-800"
+          >
+            <option value="all">همه گروه‌ها</option>
+            {groupOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select
+            value={filterMuscle}
+            onChange={(e) => { setFilterMuscle(e.target.value); setPage(0); }}
+            className="rounded-lg border border-slate-200 bg-transparent px-3 py-2.5 text-sm dark:border-slate-800"
+          >
+            <option value="all">همه عضلات</option>
+            {muscleGroupOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
         </div>
-        <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-xl font-black">کتابخانه حرکات</h2>
-          <div className="mt-3">
-            <select value={filterGroup} onChange={(event) => setFilterGroup(event.target.value)} className="w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-800">
-              <option value="all">همه گروه‌ها</option>
-              {groupOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </div>
-          <div className="mt-4 space-y-3">
-            {loading ? <p className="text-sm text-slate-500 dark:text-slate-300">در حال بارگذاری...</p> : null}
-            {!loading && filteredExercises.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-300">حرکتی برای نمایش وجود ندارد.</p> : null}
-            {filteredExercises.map((exercise) => (
-              <div key={exercise.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-4 dark:bg-slate-800">
-                <div className="min-w-0">
-                  <strong>{exercise.name}</strong>
-                  {exercise.nameEn ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{exercise.nameEn}</p> : null}
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">
-                    {exercise.group ?? "General"} • {exercise.muscleGroup ?? "—"}
-                  </p>
-                  {exercise.gifMediaId ? (
-                    <GifDisplay
-                      mediaId={exercise.gifMediaId}
-                      alt={exercise.name}
-                      title="GIF ذخیره شده"
-                      caption="این نمونه از MinIO بارگذاری می‌شود."
-                      className="mt-2 max-w-40"
-                      frameClassName="h-20 w-20"
-                      imageClassName="h-20 w-20 object-cover"
-                      compact
-                    />
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => beginEditExercise(exercise)}
-                    disabled={saving || gifUploading}
-                    className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-200"
-                  >
-                    ویرایش
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeactivate(exercise.id)}
-                    disabled={saving || gifUploading}
-                    className="rounded-lg bg-danger/10 px-4 py-2 text-sm font-black text-danger disabled:opacity-60"
-                  >
-                    غیرفعال
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        <Link
+          href="/admin/exercises/new"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-black text-white"
+        >
+          <Plus size={18} />
+          حرکت جدید
+        </Link>
       </div>
+
+      {/* Table */}
+      <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                <th className="whitespace-nowrap px-4 py-3 text-right font-black text-slate-600 dark:text-slate-300">تصویر</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right font-black text-slate-600 dark:text-slate-300">نام</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right font-black text-slate-600 dark:text-slate-300">نام انگلیسی</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right font-black text-slate-600 dark:text-slate-300">گروه</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right font-black text-slate-600 dark:text-slate-300">عضله</th>
+                <th className="whitespace-nowrap px-4 py-3 text-right font-black text-slate-600 dark:text-slate-300">وضعیت</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left font-black text-slate-600 dark:text-slate-300">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-primary" />
+                      در حال بارگذاری...
+                    </div>
+                  </td>
+                </tr>
+              ) : pageItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                    {searchQuery || filterGroup !== "all" || filterMuscle !== "all"
+                      ? "حرکتی با این مشخصات یافت نشد."
+                      : "هنوز حرکتی ثبت نشده است."}
+                  </td>
+                </tr>
+              ) : (
+                pageItems.map((exercise) => (
+                  <tr
+                    key={exercise.id}
+                    className={cn(
+                      "border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900",
+                      exercise.isActive === false && "opacity-50",
+                    )}
+                  >
+                    <td className="px-4 py-3">
+                      {exercise.gifMediaId ? (
+                        <button type="button" onClick={() => setPreviewExercise(exercise)} className="block">
+                          <GifDisplay
+                            mediaId={exercise.gifMediaId}
+                            alt={exercise.name}
+                            compact
+                            className="rounded-lg"
+                            frameClassName="h-10 w-10"
+                            imageClassName="h-10 w-10 object-cover rounded-lg"
+                          />
+                        </button>
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                          <ImageIcon size={16} className="text-slate-400" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="max-w-40 truncate px-4 py-3 font-semibold">{exercise.name}</td>
+                    <td className="max-w-32 truncate px-4 py-3 text-slate-500">{exercise.nameEn || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{exercise.group ?? "General"}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{exercise.muscleGroup || "—"}</td>
+                    <td className="px-4 py-3">
+                      {exercise.isActive === false ? (
+                        <span className="rounded-md bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                          غیرفعال
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                          فعال
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          href={`/admin/exercises/${exercise.id}/edit`}
+                          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          ویرایش
+                        </Link>
+                        {exercise.isActive !== false ? (
+                          <button
+                            type="button"
+                            onClick={() => handleDeactivate(exercise)}
+                            disabled={savingId === exercise.id}
+                            className="rounded-lg bg-danger/10 px-3 py-1.5 text-xs font-black text-danger disabled:opacity-50"
+                          >
+                            {savingId === exercise.id ? "..." : "غیرفعال"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 ? (
+        <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+          <p className="hidden text-slate-500 sm:block dark:text-slate-300">
+            {safePage * PAGE_SIZE + 1}–{Math.min((safePage + 1) * PAGE_SIZE, filteredExercises.length)} از{" "}
+            {filteredExercises.length}
+          </p>
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold disabled:opacity-40 dark:border-slate-800"
+            >
+              قبلی
+            </button>
+            {getPageNumbers(safePage, totalPages).map((item, i) =>
+              item === "..." ? (
+                <span key={`ellipsis-${i}`} className="px-2 text-xs text-slate-400">...</span>
+              ) : (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setPage(item)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-xs font-bold",
+                    item === safePage
+                      ? "bg-primary text-white"
+                      : "border border-slate-200 dark:border-slate-800",
+                  )}
+                >
+                  {item + 1}
+                </button>
+              ),
+            )}
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={safePage >= totalPages - 1}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold disabled:opacity-40 dark:border-slate-800"
+            >
+              بعدی
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* GIF Preview Modal */}
+      {previewExercise ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setPreviewExercise(null)}
+        >
+          <div
+            className="relative max-h-[90vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white p-4 shadow-2xl dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setPreviewExercise(null)}
+              className="absolute left-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
+            >
+              <X size={16} />
+            </button>
+            {previewExercise.gifMediaId ? (
+              <GifDisplay
+                mediaId={previewExercise.gifMediaId}
+                alt={previewExercise.name}
+                title={previewExercise.name}
+                caption={previewExercise.nameEn ? `${previewExercise.name} • ${previewExercise.group ?? "General"} • ${previewExercise.muscleGroup ?? "—"}` : undefined}
+                frameClassName="max-h-[70vh] w-auto"
+                imageClassName="max-h-[70vh] w-auto object-contain"
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }
