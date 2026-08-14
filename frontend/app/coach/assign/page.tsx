@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { PersianDateRangePicker } from "@/components/DateTimePicker";
 import {
@@ -20,7 +21,10 @@ const persianDateTimeFormatter = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
 });
 
 export default function AssignPage() {
-  const [athleteId, setAthleteId] = useState("");
+  const searchParams = useSearchParams();
+  const initialAthleteId = searchParams.get("athleteId") ?? "";
+
+  const [athleteId, setAthleteId] = useState(initialAthleteId);
   const [templateId, setTemplateId] = useState("");
   const [startDate, setStartDate] = useState<string | undefined>();
   const [endDate, setEndDate] = useState<string | undefined>();

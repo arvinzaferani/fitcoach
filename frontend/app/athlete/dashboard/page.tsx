@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { getAthleteTodayWorkout, getAthleteMetrics, type AthleteWorkoutResponse } from "@/lib/api";
+import { getAthleteTodayWorkout, getAthleteMetrics, getAthleteInvitations, type AthleteWorkoutResponse } from "@/lib/api";
 import {
   getWorkoutSession,
   countExercises,
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 
 export default function AthleteDashboardPage() {
   const [workoutData, setWorkoutData] = useState<AthleteWorkoutResponse | null>(null);
+  const [pendingInvitations, setPendingInvitations] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,9 +32,11 @@ export default function AthleteDashboardPage() {
     Promise.all([
       getAthleteTodayWorkout().catch(() => null),
       getAthleteMetrics().catch(() => []),
-    ]).then(([workout]) => {
+      getAthleteInvitations().catch(() => []),
+    ]).then(([workout, _metrics, invitations]) => {
       if (!mounted) return;
       setWorkoutData(workout);
+      setPendingInvitations(invitations.length);
       setLoading(false);
     });
     return () => { mounted = false; };
@@ -239,7 +242,14 @@ export default function AthleteDashboardPage() {
             <Activity size={22} className="text-accent" />
           </div>
           <div>
-            <p className="font-bold">مربی‌های من</p>
+            <div className="flex items-center gap-2">
+              <p className="font-bold">مربی‌های من</p>
+              {pendingInvitations > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-black text-white animate-pulse">
+                  {pendingInvitations}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-[var(--text-muted)]">مشاهده مربیان و دعوت‌ها</p>
           </div>
           <ChevronLeft size={18} className="mr-auto text-[var(--text-muted)]" />

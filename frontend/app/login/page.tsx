@@ -8,8 +8,8 @@ import { Activity } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("athlete@fitcoach.local");
+  const [password, setPassword] = useState("Fit123!@");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 

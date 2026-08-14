@@ -357,7 +357,7 @@ export function PersianDateTimePicker({ value, onChange, className, showTime = f
       <button
         type="button"
         onClick={() => setIsOpen((state) => !state)}
-        className="flex h-12 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-right text-sm font-medium text-slate-900 shadow-sm transition hover:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+        className="flex h-12 w-full sm:w-auto items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-right text-sm font-medium text-slate-900 shadow-sm transition hover:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
       >
         <span className={cn("truncate", value ? "text-slate-900 dark:text-slate-100" : "text-slate-400")}>{displayValue}</span>
         <span className="mr-3 text-slate-400">▾</span>

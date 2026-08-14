@@ -12,6 +12,7 @@ export type TemplateExerciseBase = {
   count?: number;
   duration?: number;
   timeUnit?: TimeUnit;
+  notes?: string;
 };
 
 export type TemplateSimpleBlock = TemplateExerciseBase & {
@@ -30,6 +31,7 @@ export type TemplateCompoundBlock = {
   type: CompoundSetType;
   rounds: number;
   children: TemplateCompoundChild[];
+  notes?: string;
 };
 
 export type TemplateBlock = TemplateSimpleBlock | TemplateCompoundBlock;

@@ -110,16 +110,17 @@ export function AppShell({
               </Link>
             ))}
           </nav>
-          <div className="absolute bottom-5 left-5 right-5 space-y-2">
-            <ThemeToggle />
+          <div className="absolute bottom-5 left-5 right-5 space-y-2 flex flex-row gap-3">
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2.5 text-sm font-bold text-danger transition-colors hover:bg-[var(--danger-light)]"
+              className="flex flex-1 h-[40px] mt-2 w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2.5 text-sm font-bold text-danger transition-colors hover:bg-[var(--danger-light)]"
             >
               <LogOut size={16} />
               <span>خروج</span>
             </button>
+            <ThemeToggle />
+
           </div>
         </aside>
 
@@ -127,9 +128,10 @@ export function AppShell({
         {mobileOpen ? (
           <div className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden" onClick={() => setMobileOpen(false)}>
             <div
-              className="absolute right-0 top-0 h-full w-[min(18rem,calc(100vw-2rem))] border-l border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl"
+              className="absolute right-0 top-0 h-full w-[min(18rem,calc(100vw-2rem))] border-l border-[var(--border)] bg-[var(--surface)] p-4 shadow-2xl flex flex-col justify-between"
               onClick={(event) => event.stopPropagation()}
             >
+              <div>
               <div className="mb-6 flex items-center justify-between">
                 <Link
                   href="/"
@@ -166,14 +168,20 @@ export function AppShell({
                   </Link>
                 ))}
               </nav>
+              </div>
+              <div className="flex flex-row gap-3">
+
               <button
                 type="button"
                 onClick={handleLogout}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 py-3 text-sm font-bold text-danger transition-colors hover:bg-[var(--danger-light)]"
+                className=" flex flex-1 h-[40px] w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 py-3 text-sm font-bold text-danger transition-colors hover:bg-[var(--danger-light)]"
               >
                 <LogOut size={16} />
                 <span>خروج</span>
               </button>
+              <ThemeToggle />
+
+              </div>
             </div>
           </div>
         ) : null}

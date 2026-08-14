@@ -128,6 +128,19 @@ export default function CreateTemplatePage() {
   const parsedDaysCount = Number(daysCount || 0);
   const baseValid = title.trim().length > 1 && parsedDaysCount > 0;
 
+  function getBlockNumber(dayNumber: number, targetBlockId: string): number {
+    let counter = 0;
+    const day = days.find((d) => d.dayNumber === dayNumber);
+    if (!day) return 0;
+    for (const phase of day.phases) {
+      for (const block of phase.blocks) {
+        counter++;
+        if (block.id === targetBlockId) return counter;
+      }
+    }
+    return 0;
+  }
+
   function isValidBlock(block: TemplateBlock) {
     if (isSimpleBlock(block)) {
       return Boolean(block.exerciseId && block.sets > 0 && (block.measureType === "count" ? (block.count ?? 0) > 0 : (block.duration ?? 0) > 0));
@@ -210,6 +223,20 @@ export default function CreateTemplatePage() {
       const nextChildren = block.children.filter((child) => child.id !== childId);
       return { ...block, children: nextChildren.length >= minChildrenForType(block.type) ? nextChildren : block.children };
     });
+  }
+
+  function removeBlock(dayNumber: number, phaseId: string, blockId: string) {
+    updatePhase(dayNumber, phaseId, (phase) => ({
+      ...phase,
+      blocks: phase.blocks.filter((block) => block.id !== blockId),
+    }));
+  }
+
+  function removePhase(dayNumber: number, phaseId: string) {
+    updateDay(dayNumber, (day) => ({
+      ...day,
+      phases: day.phases.filter((phase) => phase.id !== phaseId),
+    }));
   }
 
   function toggleCompound(dayNumber: number, phaseId: string, blockId: string, nextIsCompound: boolean) {
@@ -302,6 +329,8 @@ export default function CreateTemplatePage() {
   function renderSimpleBlock(dayNumber: number, phaseId: string, block: TemplateSimpleBlock) {
     return (
       <div key={block.id} className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 sm:p-4">
+                    <p className="text-md text-slate-500 dark:text-slate-300">تمرین {getBlockNumber(dayNumber, block.id)}</p>
+
         <div className="flex items-center justify-between gap-3">
           <label className="flex items-center gap-2 text-sm font-black">
             <input
@@ -309,176 +338,254 @@ export default function CreateTemplatePage() {
               checked={false}
               onChange={(event) => toggleCompound(dayNumber, phaseId, block.id, event.target.checked)}
             />
-            Compound set
+            ست ترکیبی
           </label>
-          <p className="text-xs text-slate-500 dark:text-slate-300">Exercise block</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => removeBlock(dayNumber, phaseId, block.id)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+              aria-label="Remove block"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <select
-            value={selectedGroupByItem[block.id] ?? "all"}
-            onChange={(event) => setSelectedGroupByItem((current) => ({ ...current, [block.id]: event.target.value }))}
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          >
-            <option value="all">همه گروه‌ها</option>
-            {groups.map((group) => (
-              <option key={group} value={group}>
-                {group}
-              </option>
-            ))}
-          </select>
-          <input
-            value={searchByItem[block.id] ?? ""}
-            onChange={(event) => setSearchByItem((current) => ({ ...current, [block.id]: event.target.value }))}
-            placeholder="جستجو حرکت..."
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          />
-          <select
-            value={block.exerciseId}
-            onChange={(event) => updateBlock(dayNumber, phaseId, block.id, (current) => {
-              if (!isSimpleBlock(current)) return current;
-              return { ...current, exerciseId: event.target.value };
-            })}
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          >
-            <option value="">انتخاب حرکت</option>
-            {loadingExercises ? <option value="">در حال بارگذاری...</option> : null}
-            {getFilteredExercises(block.id).map((exercise: CatalogExercise) => (
-              <option key={exercise.id} value={exercise.id}>
-                {exercise.name} {exercise.nameEn ? `(${exercise.nameEn})` : ""}
-              </option>
-            ))}
-          </select>
-          <input
-            type="number"
-            min={1}
-            value={block.sets}
-            onChange={(event) =>
-              updateBlock(dayNumber, phaseId, block.id, (current) => {
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            گروه عضله
+            <select
+              value={selectedGroupByItem[block.id] ?? "all"}
+              onChange={(event) => setSelectedGroupByItem((current) => ({ ...current, [block.id]: event.target.value }))}
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            >
+              <option value="all">همه گروه‌ها</option>
+              {groups.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            جستجو
+            <input
+              value={searchByItem[block.id] ?? ""}
+              onChange={(event) => setSearchByItem((current) => ({ ...current, [block.id]: event.target.value }))}
+              placeholder="نام حرکت..."
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            />
+          </label>
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            حرکت
+            <select
+              value={block.exerciseId}
+              onChange={(event) => updateBlock(dayNumber, phaseId, block.id, (current) => {
                 if (!isSimpleBlock(current)) return current;
-                return { ...current, sets: Number(event.target.value || 0) };
-              })
-            }
-            placeholder="ست"
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          />
-          <select
-            value={block.measureType}
-            onChange={(event) =>
-              updateBlock(dayNumber, phaseId, block.id, (current) => {
-                if (!isSimpleBlock(current)) return current;
-                const measureType = event.target.value as MoveMeasureType;
-                return {
-                  ...current,
-                  measureType,
-                  count: measureType === "count" ? current.count ?? 10 : undefined,
-                  duration: measureType === "time" ? current.duration ?? 30 : undefined,
-                  timeUnit: measureType === "time" ? current.timeUnit ?? "seconds" : undefined,
-                };
-              })
-            }
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          >
-            <option value="count">Count</option>
-            <option value="time">Time</option>
-          </select>
-          {block.measureType === "count" ? (
+                return { ...current, exerciseId: event.target.value };
+              })}
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            >
+              <option value="">انتخاب حرکت</option>
+              {loadingExercises ? <option value="">در حال بارگذاری...</option> : null}
+              {getFilteredExercises(block.id).map((exercise: CatalogExercise) => (
+                <option key={exercise.id} value={exercise.id}>
+                  {exercise.name} {exercise.nameEn ? `(${exercise.nameEn})` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            تعداد ست
             <input
               type="number"
               min={1}
-              value={block.count ?? ""}
+              value={block.sets}
               onChange={(event) =>
                 updateBlock(dayNumber, phaseId, block.id, (current) => {
                   if (!isSimpleBlock(current)) return current;
-                  return { ...current, count: Number(event.target.value || 0) };
+                  return { ...current, sets: Number(event.target.value || 0) };
                 })
               }
-              placeholder="تعداد تکرار"
-              className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
             />
-          ) : (
-            <>
+          </label>
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            نوع اندازه‌گیری
+            <select
+              value={block.measureType}
+              onChange={(event) =>
+                updateBlock(dayNumber, phaseId, block.id, (current) => {
+                  if (!isSimpleBlock(current)) return current;
+                  const measureType = event.target.value as MoveMeasureType;
+                  return {
+                    ...current,
+                    measureType,
+                    count: measureType === "count" ? current.count ?? 10 : undefined,
+                    duration: measureType === "time" ? current.duration ?? 30 : undefined,
+                    timeUnit: measureType === "time" ? current.timeUnit ?? "seconds" : undefined,
+                  };
+                })
+              }
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            >
+              <option value="count">تعداد تکرار</option>
+              <option value="time">زمان</option>
+            </select>
+          </label>
+          {block.measureType === "count" ? (
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+              تعداد تکرار
               <input
                 type="number"
                 min={1}
-                value={block.duration ?? ""}
+                value={block.count ?? ""}
                 onChange={(event) =>
                   updateBlock(dayNumber, phaseId, block.id, (current) => {
                     if (!isSimpleBlock(current)) return current;
-                    return { ...current, duration: Number(event.target.value || 0) };
+                    return { ...current, count: Number(event.target.value || 0) };
                   })
                 }
-                placeholder="زمان"
-                className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
               />
-              <select
-                value={block.timeUnit ?? "seconds"}
-                onChange={(event) =>
-                  updateBlock(dayNumber, phaseId, block.id, (current) => {
-                    if (!isSimpleBlock(current)) return current;
-                    return { ...current, timeUnit: event.target.value as TimeUnit };
-                  })
-                }
-                className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-              >
-                <option value="seconds">Second</option>
-                <option value="minutes">Minute</option>
-              </select>
+            </label>
+          ) : (
+            <>
+            <div className="flex flex-row gap-3">
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 w-[50%]">
+                زمان (ثانیه)
+                <input
+                
+                  type="number"
+                  min={1}
+                  value={block.duration ?? ""}
+                  onChange={(event) =>
+                    updateBlock(dayNumber, phaseId, block.id, (current) => {
+                      if (!isSimpleBlock(current)) return current;
+                      return { ...current, duration: Number(event.target.value || 0) };
+                    })
+                  }
+                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600 h-[47px]"
+                />
+              </label>
+              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 w-[50%] ">
+                واحد زمان
+                <select
+                  value={block.timeUnit ?? "seconds"}
+                  onChange={(event) =>
+                    updateBlock(dayNumber, phaseId, block.id, (current) => {
+                      if (!isSimpleBlock(current)) return current;
+                      return { ...current, timeUnit: event.target.value as TimeUnit };
+                    })
+                  }
+                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                >
+                  <option value="seconds">ثانیه</option>
+                  <option value="minutes">دقیقه</option>
+                </select>
+              </label>
+              </div>
             </>
           )}
-          <p className="text-xs text-slate-500">حرکت تک‌تایی</p>
         </div>
+        <label className="mt-3 text-xs font-bold text-slate-500 dark:text-slate-400">
+          توضیحات حرکت (اختیاری)
+          <input
+            value={block.notes ?? ""}
+            onChange={(event) =>
+              updateBlock(dayNumber, phaseId, block.id, (current) => {
+                if (!isSimpleBlock(current)) return current;
+                return { ...current, notes: event.target.value || undefined };
+              })
+            }
+            placeholder="مثلاً: با سرعت کمتر اجرا شود"
+            className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-2.5 text-sm dark:border-slate-600"
+          />
+        </label>
       </div>
     );
   }
 
   function renderCompoundBlock(dayNumber: number, phaseId: string, block: TemplateCompoundBlock) {
     return (
-      <div key={block.id} className="mt-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900 sm:p-4">
+      <div key={block.id} className="mt-3 rounded-lg border border-slate-200 bg-blue-50 p-3 dark:border-slate-700 dark:bg-slate-950 sm:p-4">
+                            <p className="text-md text-slate-500 dark:text-slate-300">تمرین {getBlockNumber(dayNumber, block.id)} - ترکیبی (compound)</p>
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="flex items-center gap-2 text-sm font-black">
             <input type="checkbox" checked onChange={(event) => toggleCompound(dayNumber, phaseId, block.id, event.target.checked)} />
-            Compound set
+            ست ترکیبی
           </label>
-          <p className="text-xs text-slate-500 dark:text-slate-300">Superset / triple / circuit</p>
+          <div className="flex items-center gap-2">
+            {/* <p className="text-xs text-slate-500 dark:text-slate-300">بلوک {getBlockNumber(dayNumber, block.id)} — کمپوند</p> */}
+            <button
+              type="button"
+              onClick={() => removeBlock(dayNumber, phaseId, block.id)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+              aria-label="Remove block"
+            >
+              <Trash2 aria-hidden="true" size={15} />
+            </button>
+          </div>
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400 sm:col-span-2 xl:col-span-3">
+            عنوان کمپوند
+            <input
+              value={block.title}
+              onChange={(event) => updateBlock(dayNumber, phaseId, block.id, (current) => {
+                if (!isCompoundBlock(current)) return current;
+                return { ...current, title: event.target.value };
+              })}
+              placeholder="مثلاً: سوپرست سینه‌ای"
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            />
+          </label>
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            نوع کمپوند
+            <select
+              value={block.type}
+              onChange={(event) => updateCompoundType(dayNumber, phaseId, block.id, event.target.value as CompoundSetType)}
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            >
+              <option value="superset">سوپرست</option>
+              <option value="triple">تری‌ست</option>
+              <option value="circuit">سیرکت</option>
+            </select>
+          </label>
+          <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            تعداد دور
+            <input
+              type="number"
+              min={1}
+              value={block.rounds}
+              onChange={(event) =>
+                updateBlock(dayNumber, phaseId, block.id, (current) => {
+                  if (!isCompoundBlock(current)) return current;
+                  return { ...current, rounds: Number(event.target.value || 0) };
+                })
+              }
+              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+            />
+          </label>
+        </div>
+        <label className="mt-3 text-xs font-bold text-slate-500 dark:text-slate-400">
+          توضیحات کلی کمپوند (اختیاری)
           <input
-            value={block.title}
+            value={block.notes ?? ""}
             onChange={(event) => updateBlock(dayNumber, phaseId, block.id, (current) => {
               if (!isCompoundBlock(current)) return current;
-              return { ...current, title: event.target.value };
+              return { ...current, notes: event.target.value || undefined };
             })}
-            placeholder="Compound title"
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600 md:col-span-2"
+            placeholder="مثلاً: بین هر ست ۳۰ ثانیه استراحت"
+            className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-2.5 text-sm dark:border-slate-600"
           />
-          <select
-            value={block.type}
-            onChange={(event) => updateCompoundType(dayNumber, phaseId, block.id, event.target.value as CompoundSetType)}
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          >
-            <option value="superset">Super</option>
-            <option value="triple">Triple</option>
-            <option value="circuit">Circuit</option>
-          </select>
-          <input
-            type="number"
-            min={1}
-            value={block.rounds}
-            onChange={(event) =>
-              updateBlock(dayNumber, phaseId, block.id, (current) => {
-                if (!isCompoundBlock(current)) return current;
-                return { ...current, rounds: Number(event.target.value || 0) };
-              })
-            }
-            placeholder="Round count"
-            className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-          />
-        </div>
+        </label>
         <div className="mt-4 space-y-3">
           {block.children.map((child, index) => (
-            <div key={child.id} className="rounded-lg border border-dashed border-slate-200 p-3 dark:border-slate-700">
+            <div key={child.id} className="rounded-lg border border-dashed bg-white border-slate-200 p-3 dark:border-slate-700 dark:bg-slate-900">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-black">Exercise {index + 1}</p>
+                <p className="text-sm font-black">حرکت {index + 1}</p>
                 <button
                   type="button"
                   onClick={() => removeChild(dayNumber, phaseId, block.id, child.id)}
@@ -490,97 +597,127 @@ export default function CreateTemplatePage() {
                 </button>
               </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <select
-                  value={selectedGroupByItem[child.id] ?? "all"}
-                  onChange={(event) => setSelectedGroupByItem((current) => ({ ...current, [child.id]: event.target.value }))}
-                  className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-                >
-                  <option value="all">همه گروه‌ها</option>
-                  {groups.map((group) => (
-                    <option key={group} value={group}>
-                      {group}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={searchByItem[child.id] ?? ""}
-                  onChange={(event) => setSearchByItem((current) => ({ ...current, [child.id]: event.target.value }))}
-                  placeholder="جستجو حرکت..."
-                  className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-                />
-                <select
-                  value={child.exerciseId}
-                  onChange={(event) =>
-                    updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({
-                      ...current,
-                      exerciseId: event.target.value,
-                    }))
-                  }
-                  className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-                >
-                  <option value="">انتخاب حرکت</option>
-                  {loadingExercises ? <option value="">در حال بارگذاری...</option> : null}
-                  {getFilteredExercises(child.id).map((exercise: CatalogExercise) => (
-                    <option key={exercise.id} value={exercise.id}>
-                      {exercise.name} {exercise.nameEn ? `(${exercise.nameEn})` : ""}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={child.measureType}
-                  onChange={(event) =>
-                    updateChild(dayNumber, phaseId, block.id, child.id, (current) => {
-                      const measureType = event.target.value as MoveMeasureType;
-                      return {
-                        ...current,
-                        measureType,
-                        count: measureType === "count" ? current.count ?? 10 : undefined,
-                        duration: measureType === "time" ? current.duration ?? 30 : undefined,
-                        timeUnit: measureType === "time" ? current.timeUnit ?? "seconds" : undefined,
-                      };
-                    })
-                  }
-                  className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-                >
-                  <option value="count">Count</option>
-                  <option value="time">Time</option>
-                </select>
-                {child.measureType === "count" ? (
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  گروه عضله
+                  <select
+                    value={selectedGroupByItem[child.id] ?? "all"}
+                    onChange={(event) => setSelectedGroupByItem((current) => ({ ...current, [child.id]: event.target.value }))}
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                  >
+                    <option value="all">همه گروه‌ها</option>
+                    {groups.map((group) => (
+                      <option key={group} value={group}>
+                        {group}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  جستجو
                   <input
-                    type="number"
-                    min={1}
-                    value={child.count ?? ""}
-                    onChange={(event) =>
-                      updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, count: Number(event.target.value || 0) }))
-                    }
-                    placeholder="تعداد تکرار"
-                    className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                    value={searchByItem[child.id] ?? ""}
+                    onChange={(event) => setSearchByItem((current) => ({ ...current, [child.id]: event.target.value }))}
+                    placeholder="نام حرکت..."
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
                   />
-                ) : (
-                  <>
+                </label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  حرکت
+                  <select
+                    value={child.exerciseId}
+                    onChange={(event) =>
+                      updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({
+                        ...current,
+                        exerciseId: event.target.value,
+                      }))
+                    }
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                  >
+                    <option value="">انتخاب حرکت</option>
+                    {loadingExercises ? <option value="">در حال بارگذاری...</option> : null}
+                    {getFilteredExercises(child.id).map((exercise: CatalogExercise) => (
+                      <option key={exercise.id} value={exercise.id}>
+                        {exercise.name} {exercise.nameEn ? `(${exercise.nameEn})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  نوع اندازه‌گیری
+                  <select
+                    value={child.measureType}
+                    onChange={(event) =>
+                      updateChild(dayNumber, phaseId, block.id, child.id, (current) => {
+                        const measureType = event.target.value as MoveMeasureType;
+                        return {
+                          ...current,
+                          measureType,
+                          count: measureType === "count" ? current.count ?? 10 : undefined,
+                          duration: measureType === "time" ? current.duration ?? 30 : undefined,
+                          timeUnit: measureType === "time" ? current.timeUnit ?? "seconds" : undefined,
+                        };
+                      })
+                    }
+                    className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                  >
+                    <option value="count">تعداد تکرار</option>
+                    <option value="time">زمان</option>
+                  </select>
+                </label>
+                {child.measureType === "count" ? (
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    تعداد تکرار
                     <input
                       type="number"
                       min={1}
-                      value={child.duration ?? ""}
+                      value={child.count ?? ""}
                       onChange={(event) =>
-                        updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, duration: Number(event.target.value || 0) }))
+                        updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, count: Number(event.target.value || 0) }))
                       }
-                      placeholder="زمان"
-                      className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                      className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
                     />
-                    <select
-                      value={child.timeUnit ?? "seconds"}
-                      onChange={(event) =>
-                        updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, timeUnit: event.target.value as TimeUnit }))
-                      }
-                      className="rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-                    >
-                      <option value="seconds">Second</option>
-                      <option value="minutes">Minute</option>
-                    </select>
+                  </label>
+                ) : (
+                  <>
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                      زمان (ثانیه)
+                      <input
+                        type="number"
+                        min={1}
+                        value={child.duration ?? ""}
+                        onChange={(event) =>
+                          updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, duration: Number(event.target.value || 0) }))
+                        }
+                        className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                      />
+                    </label>
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                      واحد زمان
+                      <select
+                        value={child.timeUnit ?? "seconds"}
+                        onChange={(event) =>
+                          updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, timeUnit: event.target.value as TimeUnit }))
+                        }
+                        className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                      >
+                        <option value="seconds">ثانیه</option>
+                        <option value="minutes">دقیقه</option>
+                      </select>
+                    </label>
                   </>
                 )}
               </div>
+              <label className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                توضیحات حرکت (اختیاری)
+                <input
+                  value={child.notes ?? ""}
+                  onChange={(event) =>
+                    updateChild(dayNumber, phaseId, block.id, child.id, (current) => ({ ...current, notes: event.target.value || undefined }))
+                  }
+                  placeholder="مثلاً: با تمرکز بالا اجرا شود"
+                  className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-sm dark:border-slate-600"
+                />
+              </label>
             </div>
           ))}
           <button type="button" onClick={() => addChild(dayNumber, phaseId, block.id)} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary/10 px-3 py-2.5 text-sm font-black text-primary sm:w-auto">
@@ -646,28 +783,50 @@ export default function CreateTemplatePage() {
                     <h3 className="text-lg font-black">روز {day.dayNumber}</h3>
                     {day.phases.map((phase) => (
                       <div key={phase.id} className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800 sm:p-4">
-                        <input
-                          value={phase.title}
-                          onChange={(event) =>
-                            updatePhase(day.dayNumber, phase.id, (currentDay) => ({
-                              ...currentDay,
-                              title: event.target.value,
-                            }))
-                          }
-                          placeholder="عنوان فاز (مثلا Warmup)"
-                          className="w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
-                        />
+                        <div className="flex items-center gap-2">
+                          <label className="flex-1 text-xs font-bold text-slate-500 dark:text-slate-400">
+                            عنوان فاز
+                            <input
+                              value={phase.title}
+                              onChange={(event) =>
+                                updatePhase(day.dayNumber, phase.id, (currentDay) => ({
+                                  ...currentDay,
+                                  title: event.target.value,
+                                }))
+                              }
+                              placeholder="مثلاً: گرم‌کردن"
+                              className="mt-1 block w-full rounded-lg border border-slate-200 bg-transparent px-4 py-3 dark:border-slate-600"
+                            />
+                          </label>
+                          {day.phases.length > 1 ? (
+                            <button
+                              type="button"
+                              onClick={() => removePhase(day.dayNumber, phase.id)}
+                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-danger hover:bg-danger/10"
+                              aria-label="Remove phase"
+                            >
+                              <Trash2 aria-hidden="true" size={16} />
+                            </button>
+                          ) : null}
+                        </div>
                         {phase.blocks.map((block) => (isCompoundBlock(block) ? renderCompoundBlock(day.dayNumber, phase.id, block) : renderSimpleBlock(day.dayNumber, phase.id, block)))}
+                        <div className="w-full flex fflex-row justify-end">
                         <button type="button" onClick={() => addBlock(day.dayNumber, phase.id)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-secondary/10 px-3 py-2.5 text-sm font-black text-secondary sm:w-auto">
                           <Plus aria-hidden="true" size={16} />
-                          <span>افزودن بلوک</span>
+                          <span>افزودن حرکت</span>
                         </button>
+                        </div>
                       </div>
                     ))}
+                                            <div className="w-full flex fflex-row justify-end">
+
                     <button type="button" onClick={() => addPhase(day.dayNumber)} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-secondary/10 px-3 py-2.5 text-sm font-black text-secondary sm:w-auto">
                       <Plus aria-hidden="true" size={16} />
+                      
                       <span>افزودن فاز</span>
+                    
                     </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -702,21 +861,28 @@ export default function CreateTemplatePage() {
                           isCompoundBlock(block) ? (
                             <div key={block.id} className="mt-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-700">
                               <p className="font-bold">
-                                کمپوند: {block.title} - {block.type} - {block.rounds} دور
+                                بلوک {getBlockNumber(day.dayNumber, block.id)} — کمپوند: {block.title} — {block.type} — {block.rounds} دور
                               </p>
+                              {block.notes ? <p className="mt-1 text-xs text-slate-500">{block.notes}</p> : null}
                               {block.children.map((child, index) => {
                                 const exercise = exerciseCatalog.find((item) => item.id === child.exerciseId);
                                 return (
-                                  <p key={child.id} className="mt-1">
-                                    {index + 1}. {exercise?.name ?? "نامشخص"} - {child.measureType === "count" ? `${child.count ?? 0} تکرار` : `${child.duration ?? 0} ${child.timeUnit ?? "seconds"}`}
-                                  </p>
+                                  <div key={child.id} className="mt-1">
+                                    <p>
+                                      {index + 1}. {exercise?.name ?? "نامشخص"} — {child.measureType === "count" ? `${child.count ?? 0} تکرار` : `${child.duration ?? 0} ${child.timeUnit === "minutes" ? "دقیقه" : "ثانیه"}`}
+                                    </p>
+                                    {child.notes ? <p className="ml-4 text-xs text-slate-400">{child.notes}</p> : null}
+                                  </div>
                                 );
                               })}
                             </div>
                           ) : (
-                            <p key={block.id} className="mt-2">
-                              بلوک: {exerciseCatalog.find((item) => item.id === block.exerciseId)?.name ?? "نامشخص"} - {block.sets} ست - {block.measureType === "count" ? `${block.count ?? 0} تکرار` : `${block.duration ?? 0} ${block.timeUnit}`}
-                            </p>
+                            <div key={block.id} className="mt-2">
+                              <p className="font-bold">
+                                بلوک {getBlockNumber(day.dayNumber, block.id)} — {exerciseCatalog.find((item) => item.id === block.exerciseId)?.name ?? "نامشخص"} — {block.sets} ست — {block.measureType === "count" ? `${block.count ?? 0} تکرار` : `${block.duration ?? 0} ${block.timeUnit === "minutes" ? "دقیقه" : "ثانیه"}`}
+                              </p>
+                              {block.notes ? <p className="ml-4 text-xs text-slate-400">{block.notes}</p> : null}
+                            </div>
                           ),
                         )}
                       </div>

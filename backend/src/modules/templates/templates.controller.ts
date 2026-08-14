@@ -29,8 +29,8 @@ export class TemplatesController {
   }
 
   @Get(":id")
-  findOne(@Param("id") id: string) {
-    return { id, message: "Template details." };
+  findOne(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.templatesService.getTemplate(id, user.sub);
   }
 
   @Put(":id")

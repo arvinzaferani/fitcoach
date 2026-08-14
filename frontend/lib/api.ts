@@ -100,6 +100,44 @@ export type CoachTemplateItem = {
   notes?: string;
 };
 
+export type CoachTemplateDetailResponse = CoachTemplateItem & {
+  createdAt: string;
+  plan: Array<{
+    dayNumber: number;
+    phases: Array<{
+      id: string;
+      title: string;
+      blocks: Array<{
+        id: string;
+        kind: "exercise" | "compound";
+        title?: string;
+        type?: string;
+        rounds?: number;
+        sets?: number;
+        exerciseId?: string;
+        exerciseName?: string;
+        muscleGroup?: string;
+        measureType?: string;
+        count?: number;
+        duration?: number;
+        timeUnit?: string;
+        notes?: string;
+        children?: Array<{
+          id: string;
+          exerciseId: string;
+          exerciseName?: string;
+          muscleGroup?: string;
+          measureType?: string;
+          count?: number;
+          duration?: number;
+          timeUnit?: string;
+          notes?: string;
+        }>;
+      }>;
+    }>;
+  }>;
+};
+
 export type CreateCoachTemplateInput = {
   title: string;
   difficultyLevel: string;
@@ -237,6 +275,10 @@ export function createCoachTemplate(input: CreateCoachTemplateInput) {
   });
 }
 
+export function getCoachTemplate(id: string) {
+  return apiGet<CoachTemplateDetailResponse>(`/coach/templates/${id}`);
+}
+
 export function getCoachAssignments() {
   return apiGet<CoachAssignmentItem[]>("/coach/assignments");
 }
@@ -278,4 +320,51 @@ export function inviteAthlete(input: { athleteContact: string; message?: string 
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export type AthleteProfileResponse = {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  profile: {
+    gender?: string | null;
+    birthDate?: string | null;
+    fitnessLevel?: string | null;
+    primaryGoal?: string | null;
+    trainingDaysPerWeek?: number | null;
+    injuries?: string | null;
+    medicalConditions?: string | null;
+  } | null;
+  metrics: AthleteMetricResponse[];
+  activeProgram: {
+    id: string;
+    templateId: string;
+    templateTitle: string;
+    difficulty: string;
+    purpose?: string | null;
+    startDate: string;
+    endDate: string;
+    isCustomized: boolean;
+  } | null;
+};
+
+export type AthleteCurrentProgramResponse = {
+  id: string;
+  templateId: string;
+  templateTitle: string;
+  difficulty: string;
+  purpose?: string | null;
+  startDate: string;
+  endDate: string;
+  isCustomized: boolean;
+  customizationNote?: string | null;
+} | null;
+
+export function getAthleteProfile(athleteId: string) {
+  return apiGet<AthleteProfileResponse>(`/coach/athletes/${athleteId}/profile`);
+}
+
+export function getAthleteCurrentProgram(athleteId: string) {
+  return apiGet<AthleteCurrentProgramResponse>(`/coach/athletes/${athleteId}/current-program`);
 }

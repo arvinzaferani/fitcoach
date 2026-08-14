@@ -11,6 +11,7 @@ type TemplateExerciseConfig = {
   count?: number;
   duration?: number;
   timeUnit?: "seconds" | "minutes";
+  notes?: string;
 };
 
 type TemplateSimpleBlockConfig = TemplateExerciseConfig & {
@@ -25,6 +26,7 @@ type TemplateCompoundBlockConfig = {
   type: CompoundSetType;
   rounds: number;
   children: TemplateExerciseConfig[];
+  notes?: string;
 };
 
 type TemplateBlockConfig = TemplateSimpleBlockConfig | TemplateCompoundBlockConfig;
@@ -111,6 +113,7 @@ function parseExerciseConfig(value: unknown, fallbackId: string): TemplateExerci
     count: typeof value.count === "number" ? value.count : undefined,
     duration: typeof value.duration === "number" ? value.duration : undefined,
     timeUnit: value.timeUnit === "minutes" ? "minutes" : "seconds",
+    notes: typeof value.notes === "string" && value.notes.length > 0 ? value.notes : undefined,
   };
 }
 
@@ -146,6 +149,7 @@ function parseBlock(value: unknown, dayIndex: number, phaseIndex: number, blockI
       type: parseCompoundType(value.type ?? rawCompound?.type),
       rounds: toPositiveNumber(value.rounds ?? value.sets, 1),
       children,
+      notes: typeof value.notes === "string" && value.notes.length > 0 ? value.notes : undefined,
     };
   }
 

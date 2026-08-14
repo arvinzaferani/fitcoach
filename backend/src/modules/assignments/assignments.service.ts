@@ -68,6 +68,116 @@ export class AssignmentsService {
     }));
   }
 
+  async getAthleteProfile(athleteId: string, coachId: string) {
+    const relation = await this.prisma.coachAthleteRelation.findUnique({
+      where: { coachId_athleteId: { coachId, athleteId } },
+    });
+
+    if (!relation) {
+      throw new Error("این ورزشکار در لیست شما نیست.");
+    }
+
+    const athlete = await this.prisma.user.findUnique({
+      where: { id: athleteId },
+      include: {
+        athleteProfile: true,
+        athleteMetrics: {
+          orderBy: { recordedAt: "desc" },
+          take: 50,
+        },
+        assignedPrograms: {
+          where: { status: "active" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: {
+            template: {
+              select: {
+                id: true,
+                title: true,
+                difficultyLevel: true,
+                suggestedForGoal: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!athlete) {
+      throw new Error("ورزشکار یافت نشد.");
+    }
+
+    const activeProgram = athlete.assignedPrograms[0] ?? null;
+
+    return {
+      id: athlete.id,
+      fullName: athlete.fullName,
+      email: athlete.email,
+      phone: athlete.phone,
+      profile: athlete.athleteProfile,
+      metrics: athlete.athleteMetrics.map((m) => ({
+        id: m.id,
+        recordedAt: m.recordedAt,
+        weightKg: m.weightKg,
+        bodyFatPercentage: m.bodyFatPercentage,
+        muscleMassKg: m.muscleMassKg,
+        biologicalAge: m.biologicalAge,
+        notes: m.notes,
+      })),
+      activeProgram: activeProgram
+        ? {
+            id: activeProgram.id,
+            templateId: activeProgram.template.id,
+            templateTitle: activeProgram.template.title,
+            difficulty: activeProgram.template.difficultyLevel,
+            purpose: activeProgram.template.suggestedForGoal,
+            startDate: activeProgram.startDate,
+            endDate: activeProgram.endDate,
+            isCustomized: activeProgram.isCustomized,
+          }
+        : null,
+    };
+  }
+
+  async getAthleteCurrentProgram(athleteId: string, coachId: string) {
+    const relation = await this.prisma.coachAthleteRelation.findUnique({
+      where: { coachId_athleteId: { coachId, athleteId } },
+    });
+
+    if (!relation) {
+      throw new Error("این ورزشکار در لیست شما نیست.");
+    }
+
+    const assignment = await this.prisma.athleteAssignedProgram.findFirst({
+      where: { athleteId, status: "active" },
+      orderBy: { createdAt: "desc" },
+      include: {
+        template: {
+          select: {
+            id: true,
+            title: true,
+            difficultyLevel: true,
+            suggestedForGoal: true,
+          },
+        },
+      },
+    });
+
+    return assignment
+      ? {
+          id: assignment.id,
+          templateId: assignment.template.id,
+          templateTitle: assignment.template.title,
+          difficulty: assignment.template.difficultyLevel,
+          purpose: assignment.template.suggestedForGoal,
+          startDate: assignment.startDate,
+          endDate: assignment.endDate,
+          isCustomized: assignment.isCustomized,
+          customizationNote: assignment.customizationNote,
+        }
+      : null;
+  }
+
   async assignTemplate(data: { athleteId: string; templateId: string; assignedBy: string; startDate: Date; endDate: Date }) {
     const assignment = await this.prisma.athleteAssignedProgram.create({
       data,

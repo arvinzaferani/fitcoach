@@ -209,6 +209,524 @@ async function main() {
 
   const count = await prisma.exercise.count();
   console.log(`✅ Seed completed: ${count} exercises`);
+
+  // ===== Seed Program Templates =====
+  await seedTemplates(prisma);
+}
+
+async function seedTemplates(prisma: PrismaClient) {
+  const coach = await prisma.user.findUnique({ where: { email: "coach@fitcoach.local" } });
+  if (!coach) return;
+
+  const allExercises = await prisma.exercise.findMany();
+  const exMap = new Map(allExercises.map((e) => [e.nameEn, e]));
+  const ex = (nameEn: string) => {
+    const found = exMap.get(nameEn);
+    if (!found) {
+      console.warn(`⚠ Exercise not found: "${nameEn}" — skipping`);
+      return null;
+    }
+    return found;
+  };
+
+  const existingTemplates = await prisma.programTemplate.count();
+  if (existingTemplates > 0) {
+    console.log(`⏭️  ${existingTemplates} templates already exist, skipping template seed`);
+    return;
+  }
+
+  // ——— Template 1: Full Body Beginner ———
+  const fullBody = await prisma.programTemplate.create({
+    data: {
+      coachId: coach.id,
+      title: "شروع کامل بدن",
+      description: "برنامه‌ای مناسب برای مبتدیان - تمرین کامل بدن در هر جلسه",
+      difficultyLevel: "beginner",
+      suggestedForGoal: "general_fitness",
+      suggestedForLevel: "beginner",
+      suggestedTrainingDays: 3,
+      isPublic: true,
+      plan: { type: "full_body", focus: "general_fitness" },
+      weeks: {
+        create: [1, 2, 3, 4].map((weekNum) => ({
+          weekNumber: weekNum,
+          title: `هفته ${weekNum}`,
+          days: {
+            create: [
+              {
+                dayNumber: 1,
+                title: "تمرین A",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Barbell Squat")!.id, orderIndex: 1, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Barbell Bench Press")!.id, orderIndex: 2, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Dumbbell Row")!.id, orderIndex: 3, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Dumbbell Shoulder Press")!.id, orderIndex: 4, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Plank")!.id, orderIndex: 5, sets: 3, repsMin: 20, repsMax: 60, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 2,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 3,
+                title: "تمرین B",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Deadlift")!.id, orderIndex: 1, sets: 3, repsMin: 6, repsMax: 10, restSeconds: 90 },
+                    { exerciseId: ex("Incline Dumbbell Press")!.id, orderIndex: 2, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Lat Pulldown")!.id, orderIndex: 3, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Dumbbell Lateral Raise")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Leg Raise")!.id, orderIndex: 5, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 4,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 5,
+                title: "تمرین C",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Dumbbell Squat")!.id, orderIndex: 1, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Dumbbell Bench Press")!.id, orderIndex: 2, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Seated Cable Row")!.id, orderIndex: 3, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Barbell Curl")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Triceps Pushdown")!.id, orderIndex: 5, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 6,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 7,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+            ],
+          },
+        })),
+      },
+    },
+    include: { weeks: { include: { days: { include: { exercises: true } } } } },
+  });
+  console.log(`✅ Template created: "${fullBody.title}"`);
+
+  // ——— Template 2: Push / Pull / Legs ———
+  const ppl = await prisma.programTemplate.create({
+    data: {
+      coachId: coach.id,
+      title: "فشار / کشش / پا (PPL)",
+      description: "برنامه پیشرفته جلو و پشت بازو - ۶ جلسه در هفته",
+      difficultyLevel: "intermediate",
+      suggestedForGoal: "muscle_gain",
+      suggestedForLevel: "intermediate",
+      suggestedTrainingDays: 6,
+      isPublic: true,
+      plan: { type: "ppl", focus: "hypertrophy" },
+      weeks: {
+        create: [1, 2, 3, 4].map((weekNum) => ({
+          weekNumber: weekNum,
+          title: `هفته ${weekNum}`,
+          days: {
+            create: [
+              {
+                dayNumber: 1,
+                title: "فشار (Push)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Barbell Bench Press")!.id, orderIndex: 1, sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+                    { exerciseId: ex("Incline Dumbbell Press")!.id, orderIndex: 2, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Dumbbell Shoulder Press")!.id, orderIndex: 3, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Dumbbell Lateral Raise")!.id, orderIndex: 4, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Skull Crusher")!.id, orderIndex: 5, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Triceps Pushdown")!.id, orderIndex: 6, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 2,
+                title: "کشش (Pull)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Deadlift")!.id, orderIndex: 1, sets: 4, repsMin: 5, repsMax: 8, restSeconds: 120 },
+                    { exerciseId: ex("Pull Up")!.id, orderIndex: 2, sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+                    { exerciseId: ex("Barbell Row")!.id, orderIndex: 3, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Face Pull")!.id, orderIndex: 4, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Barbell Curl")!.id, orderIndex: 5, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Hammer Curl")!.id, orderIndex: 6, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 3,
+                title: "پا (Legs)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Barbell Squat")!.id, orderIndex: 1, sets: 4, repsMin: 6, repsMax: 10, restSeconds: 120 },
+                    { exerciseId: ex("Romanian Deadlift")!.id, orderIndex: 2, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Leg Extension")!.id, orderIndex: 3, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Leg Curl")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Standing Calf Raise")!.id, orderIndex: 5, sets: 4, repsMin: 12, repsMax: 20, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 4,
+                title: "فشار (Push)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Overhead Triceps Extension")!.id, orderIndex: 1, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Decline Dumbbell Press")!.id, orderIndex: 2, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Push Up")!.id, orderIndex: 3, sets: 3, repsMin: 12, repsMax: 20, restSeconds: 60 },
+                    { exerciseId: ex("Dumbbell Front Raise")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Cable Fly")!.id, orderIndex: 5, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Dips")!.id, orderIndex: 6, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 5,
+                title: "کشش (Pull)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Chin Up")!.id, orderIndex: 1, sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+                    { exerciseId: ex("T-Bar Row")!.id, orderIndex: 2, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Straight Arm Pulldown")!.id, orderIndex: 3, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Dumbbell Shrug")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Preacher Curl")!.id, orderIndex: 5, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Reverse Curl")!.id, orderIndex: 6, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 6,
+                title: "پا (Legs)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Front Squat")!.id, orderIndex: 1, sets: 4, repsMin: 6, repsMax: 10, restSeconds: 120 },
+                    { exerciseId: ex("Bulgarian Split Squat")!.id, orderIndex: 2, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Hip Thrust")!.id, orderIndex: 3, sets: 4, repsMin: 10, repsMax: 15, restSeconds: 75 },
+                    { exerciseId: ex("Lunges")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Seated Calf Raise")!.id, orderIndex: 5, sets: 4, repsMin: 12, repsMax: 20, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 7,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+            ],
+          },
+        })),
+      },
+    },
+    include: { weeks: { include: { days: { include: { exercises: true } } } } },
+  });
+  console.log(`✅ Template created: "${ppl.title}"`);
+
+  // ——— Template 3: Upper / Lower Split ———
+  const upperLower = await prisma.programTemplate.create({
+    data: {
+      coachId: coach.id,
+      title: "بالا تنه / پایین تنه",
+      description: "برنامه ۴ جلسه‌ای بالا و پایین تنه برای افزایش قدرت",
+      difficultyLevel: "intermediate",
+      suggestedForGoal: "strength",
+      suggestedForLevel: "intermediate",
+      suggestedTrainingDays: 4,
+      isPublic: true,
+      plan: { type: "upper_lower", focus: "strength" },
+      weeks: {
+        create: [1, 2, 3, 4].map((weekNum) => ({
+          weekNumber: weekNum,
+          title: `هفته ${weekNum}`,
+          days: {
+            create: [
+              {
+                dayNumber: 1,
+                title: "بالا تنه (قدرتی)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Barbell Bench Press")!.id, orderIndex: 1, sets: 5, repsMin: 3, repsMax: 6, restSeconds: 120 },
+                    { exerciseId: ex("Barbell Row")!.id, orderIndex: 2, sets: 5, repsMin: 3, repsMax: 6, restSeconds: 120 },
+                    { exerciseId: ex("Dumbbell Shoulder Press")!.id, orderIndex: 3, sets: 4, repsMin: 6, repsMax: 10, restSeconds: 90 },
+                    { exerciseId: ex("Pull Up")!.id, orderIndex: 4, sets: 4, repsMin: 5, repsMax: 8, restSeconds: 90 },
+                    { exerciseId: ex("Barbell Curl")!.id, orderIndex: 5, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Dips")!.id, orderIndex: 6, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 2,
+                title: "پایین تنه (قدرتی)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Barbell Squat")!.id, orderIndex: 1, sets: 5, repsMin: 3, repsMax: 6, restSeconds: 120 },
+                    { exerciseId: ex("Deadlift")!.id, orderIndex: 2, sets: 4, repsMin: 3, repsMax: 6, restSeconds: 120 },
+                    { exerciseId: ex("Leg Press")!.id, orderIndex: 3, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Leg Curl")!.id, orderIndex: 4, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Standing Calf Raise")!.id, orderIndex: 5, sets: 4, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 3,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 4,
+                title: "بالا تنه (حجمی)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Incline Dumbbell Press")!.id, orderIndex: 1, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Lat Pulldown")!.id, orderIndex: 2, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Dumbbell Lateral Raise")!.id, orderIndex: 3, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Seated Cable Row")!.id, orderIndex: 4, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 75 },
+                    { exerciseId: ex("Skull Crusher")!.id, orderIndex: 5, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Hammer Curl")!.id, orderIndex: 6, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 5,
+                title: "پایین تنه (حجمی)",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Dumbbell Squat")!.id, orderIndex: 1, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Romanian Deadlift")!.id, orderIndex: 2, sets: 4, repsMin: 8, repsMax: 12, restSeconds: 90 },
+                    { exerciseId: ex("Walking Lunges")!.id, orderIndex: 3, sets: 3, repsMin: 10, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Leg Extension")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Seated Calf Raise")!.id, orderIndex: 5, sets: 4, repsMin: 12, repsMax: 20, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 6,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 7,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+            ],
+          },
+        })),
+      },
+    },
+    include: { weeks: { include: { days: { include: { exercises: true } } } } },
+  });
+  console.log(`✅ Template created: "${upperLower.title}"`);
+
+  // ——— Template 4: Weight Loss & Conditioning ———
+  const weightLoss = await prisma.programTemplate.create({
+    data: {
+      coachId: coach.id,
+      title: "کاهش وزن و آمادگی جسمانی",
+      description: "برنامه تلفیقی قدرتی و هوازی برای چربی سوزی حداکثری",
+      difficultyLevel: "beginner",
+      suggestedForGoal: "weight_loss",
+      suggestedForLevel: "beginner",
+      suggestedTrainingDays: 4,
+      isPublic: true,
+      plan: { type: "circuit", focus: "fat_loss" },
+      weeks: {
+        create: [1, 2, 3, 4].map((weekNum) => ({
+          weekNumber: weekNum,
+          title: `هفته ${weekNum}`,
+          days: {
+            create: [
+              {
+                dayNumber: 1,
+                title: "تمرین تناوبی A",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Jump Squat")!.id, orderIndex: 1, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 30 },
+                    { exerciseId: ex("Push Up")!.id, orderIndex: 2, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 30 },
+                    { exerciseId: ex("Dumbbell Row")!.id, orderIndex: 3, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 30 },
+                    { exerciseId: ex("Mountain Climber")!.id, orderIndex: 4, sets: 3, repsMin: 20, repsMax: 30, restSeconds: 30 },
+                    { exerciseId: ex("Burpee")!.id, orderIndex: 5, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 30 },
+                    { exerciseId: ex("Plank")!.id, orderIndex: 6, sets: 3, repsMin: 30, repsMax: 60, restSeconds: 30 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 2,
+                title: "کار هوازی",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Treadmill")!.id, orderIndex: 1, sets: 1, repsMin: 20, repsMax: 30, restSeconds: 0, notes: "۲۰-۳۰ دقیقه با شدت متوسط" },
+                    { exerciseId: ex("Rowing Machine")!.id, orderIndex: 2, sets: 1, repsMin: 10, repsMax: 15, restSeconds: 0, notes: "۱۰-۱۵ دقیقه پارویی" },
+                    { exerciseId: ex("Hamstring Stretch")!.id, orderIndex: 3, sets: 2, repsMin: 30, repsMax: 30, restSeconds: 0, notes: "کشش پایانی ۳۰ ثانیه" },
+                  ],
+                },
+              },
+              {
+                dayNumber: 3,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 4,
+                title: "تمرین تناوبی B",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Goblet Squat")!.id, orderIndex: 1, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 30 },
+                    { exerciseId: ex("Incline Push Up")!.id, orderIndex: 2, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 30 },
+                    { exerciseId: ex("Dumbbell Deadlift")!.id, orderIndex: 3, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 30 },
+                    { exerciseId: ex("Bicycle Crunch")!.id, orderIndex: 4, sets: 3, repsMin: 15, repsMax: 20, restSeconds: 30 },
+                    { exerciseId: ex("Jump Rope")!.id, orderIndex: 5, sets: 3, repsMin: 30, repsMax: 60, restSeconds: 30 },
+                    { exerciseId: ex("Glute Bridge")!.id, orderIndex: 6, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 30 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 5,
+                title: "کار هوازی",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Stationary Bike")!.id, orderIndex: 1, sets: 1, repsMin: 20, repsMax: 30, restSeconds: 0, notes: "۲۰-۳۰ دقیقه با شدت متوسط" },
+                    { exerciseId: ex("Elliptical")!.id, orderIndex: 2, sets: 1, repsMin: 10, repsMax: 15, restSeconds: 0, notes: "۱۰-۱۵ دقیقه الپتیکال" },
+                    { exerciseId: ex("Shoulder Stretch")!.id, orderIndex: 3, sets: 2, repsMin: 30, repsMax: 30, restSeconds: 0, notes: "کشش پایانی ۳۰ ثانیه" },
+                  ],
+                },
+              },
+              {
+                dayNumber: 6,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 7,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+            ],
+          },
+        })),
+      },
+    },
+    include: { weeks: { include: { days: { include: { exercises: true } } } } },
+  });
+  console.log(`✅ Template created: "${weightLoss.title}"`);
+
+  // ——— Template 5: Home Bodyweight ———
+  const homeWorkout = await prisma.programTemplate.create({
+    data: {
+      coachId: coach.id,
+      title: "تمرین در خانه (بدون وسیله)",
+      description: "برنامه‌ای کامل با تمرینات وزن بدن - مناسب برای تمرین در خانه",
+      difficultyLevel: "beginner",
+      suggestedForGoal: "general_fitness",
+      suggestedForLevel: "beginner",
+      suggestedTrainingDays: 3,
+      isPublic: true,
+      plan: { type: "bodyweight", focus: "general_fitness" },
+      weeks: {
+        create: [1, 2, 3, 4].map((weekNum) => ({
+          weekNumber: weekNum,
+          title: `هفته ${weekNum}`,
+          days: {
+            create: [
+              {
+                dayNumber: 1,
+                title: "تمرین A",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Goblet Squat")!.id, orderIndex: 1, sets: 3, repsMin: 12, repsMax: 20, restSeconds: 60 },
+                    { exerciseId: ex("Push Up")!.id, orderIndex: 2, sets: 3, repsMin: 8, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Lunges")!.id, orderIndex: 3, sets: 3, repsMin: 10, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Plank")!.id, orderIndex: 4, sets: 3, repsMin: 20, repsMax: 45, restSeconds: 45 },
+                    { exerciseId: ex("Glute Bridge")!.id, orderIndex: 5, sets: 3, repsMin: 12, repsMax: 15, restSeconds: 45 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 2,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 3,
+                title: "تمرین B",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Incline Push Up")!.id, orderIndex: 1, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 60 },
+                    { exerciseId: ex("Diamond Push Up")!.id, orderIndex: 2, sets: 3, repsMin: 6, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("High Knees")!.id, orderIndex: 3, sets: 3, repsMin: 20, repsMax: 30, restSeconds: 30 },
+                    { exerciseId: ex("Leg Raise")!.id, orderIndex: 4, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Russian Twist")!.id, orderIndex: 5, sets: 3, repsMin: 12, repsMax: 20, restSeconds: 30 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 4,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 5,
+                title: "تمرین C",
+                exercises: {
+                  create: [
+                    { exerciseId: ex("Burpee")!.id, orderIndex: 1, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 45 },
+                    { exerciseId: ex("Jump Squat")!.id, orderIndex: 2, sets: 3, repsMin: 10, repsMax: 15, restSeconds: 45 },
+                    { exerciseId: ex("Decline Push Up")!.id, orderIndex: 3, sets: 3, repsMin: 8, repsMax: 12, restSeconds: 60 },
+                    { exerciseId: ex("Mountain Climber")!.id, orderIndex: 4, sets: 3, repsMin: 20, repsMax: 30, restSeconds: 30 },
+                    { exerciseId: ex("Side Plank")!.id, orderIndex: 5, sets: 3, repsMin: 20, repsMax: 40, restSeconds: 30 },
+                    { exerciseId: ex("Flutter Kicks")!.id, orderIndex: 6, sets: 3, repsMin: 15, repsMax: 20, restSeconds: 30 },
+                  ],
+                },
+              },
+              {
+                dayNumber: 6,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+              {
+                dayNumber: 7,
+                title: "استراحت",
+                dayType: "rest",
+                exercises: { create: [] },
+              },
+            ],
+          },
+        })),
+      },
+    },
+    include: { weeks: { include: { days: { include: { exercises: true } } } } },
+  });
+  console.log(`✅ Template created: "${homeWorkout.title}"`);
+
+  const templateCount = await prisma.programTemplate.count();
+  console.log(`✅ Seed completed: ${templateCount} program templates`);
 }
 
 main()

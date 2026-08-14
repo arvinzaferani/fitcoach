@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { DateTimePicker } from "@/components/DateTimePicker";
 import { MetricChart } from "@/components/MetricChart";
 import { getAthleteMetrics } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -194,13 +195,7 @@ export default function AthleteMetricsPage() {
             </div>
           </div>
           <div className="mt-4">
-            <label className="mb-1 block text-xs font-bold text-[var(--text-secondary)]">تاریخ</label>
-            <input
-              type="datetime-local"
-              value={recordedAt}
-              onChange={(e) => setRecordedAt(e.target.value)}
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
+            <DateTimePicker value={recordedAt} onChange={setRecordedAt} label="تاریخ و ساعت" />
           </div>
           <button
             type="submit"

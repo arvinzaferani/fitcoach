@@ -26,8 +26,8 @@ export class AssignmentsController {
   }
 
   @Get("athletes/:id/profile")
-  athleteProfile(@Param("id") id: string) {
-    return { id, message: "Athlete profile with metrics and programs." };
+  athleteProfile(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.assignmentsService.getAthleteProfile(id, user.sub);
   }
 
   @Put("athletes/:id/profile")
@@ -62,7 +62,7 @@ export class AssignmentsController {
   }
 
   @Get("athletes/:id/current-program")
-  currentProgram(@Param("id") id: string) {
-    return { id, message: "Current athlete program." };
+  currentProgram(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.assignmentsService.getAthleteCurrentProgram(id, user.sub);
   }
 }
