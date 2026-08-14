@@ -1,147 +1,284 @@
-<div align="center">
+حتماً. برای **FitCoach** پیشنهاد می‌کنم README بیشتر شبیه معرفی یک محصول واقعی باشه تا صرفاً لیست تکنولوژی‌ها. این نسخه برای GitHub مناسبه و می‌تونی مستقیم جایگزین README فعلی کنی:
 
-# FitCoach
+# 🏋️ FitCoach
 
-**پلتفرم مدیریت تمرینات بین مربی و ورزشکار**
+A fitness management platform designed to connect **coaches and athletes**, making it easier to create flexible workout programs, manage training sessions, and track progress over time.
 
-A Persian-first, RTL coach–athlete workout management platform.
-
-Built with Next.js, NestJS, and PostgreSQL.
-
-</div>
+> **Persian-first & RTL** fitness platform built with a modern full-stack architecture.
 
 ---
 
-## About
+## ✨ Overview
 
-FitCoach lets coaches design workout programs, assign them to athletes, and track progress — while athletes view their plans, log workouts, and update their body metrics. The entire UI is Persian and right-to-left.
+FitCoach provides a complete workflow for **Athletes, Coaches, and Administrators**.
 
-Three user roles are supported:
+### 🧑‍🏫 Coaches
 
-| Role | What they can do |
-|------|------------------|
-| **Admin** | Manage the base exercise library (with GIFs) |
-| **Coach** | Design program templates, manage athletes, assign & customize programs |
-| **Athlete** | View assigned plans, log workouts, track metrics |
+* Create and manage workout programs
+* Define flexible exercises and workout structures
+* Configure sets, reps, duration, rest time, and other exercise details
+* Assign programs to athletes
+* Manage coach–athlete relationships
+* Track athlete performance and progress
 
-## Features
+### 🏃 Athletes
 
-- JWT + bcrypt authentication with role-based access control (admin / coach / athlete)
-- Exercise catalog with Persian names, muscle groups, equipment, and animated GIFs
-- Coach program template library + per-athlete assignment and customization
-- Coach–athlete invitations and athlete management
-- Daily workout player with set logging and rest timer
-- Metric tracking (weight, body fat, muscle mass) with charts
-- RTL Persian UI with Vazirmatn font, light/dark themes
-- MinIO (S3-compatible) storage for exercise media
+* View assigned workout programs
+* Follow daily workouts
+* Record completed exercises and sets
+* Track body metrics and training progress
+* Review their workout history
 
-## Tech Stack
+### 🛠️ Admin Panel
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, Recharts |
-| Backend | NestJS, TypeScript, Prisma ORM, Passport JWT |
-| Database | PostgreSQL 16 (Docker) |
-| Storage | MinIO (S3-compatible) for exercise GIFs |
-| Auth | JWT access + refresh tokens, bcrypt password hashing |
+* Manage users
+* Manage coaches and athletes
+* Manage the platform structure
+* Monitor and manage the overall system
 
-## Getting Started
+---
+
+## 🧩 Flexible Workout System
+
+One of the main focuses of FitCoach is providing a **flexible exercise and workout definition system**.
+
+Instead of forcing coaches into a fixed workout structure, exercises can be configured with different parameters depending on the training requirements.
+
+For example:
+
+* Sets
+* Repetitions
+* Duration
+* Rest time
+* Exercise-specific parameters
+* Workout ordering
+* Custom exercise configurations
+
+This makes the system suitable for different coaching styles and training methodologies.
+
+---
+
+## 🏗️ Architecture
+
+FitCoach is built as a full-stack application with a separated frontend and backend.
+
+```text
+┌──────────────────────┐
+│      Web Client      │
+│   Next.js + React    │
+└──────────┬───────────┘
+           │
+           │ REST API
+           ▼
+┌──────────────────────┐
+│       Backend        │
+│        NestJS        │
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐
+│     PostgreSQL       │
+│        Prisma        │
+└──────────────────────┘
+```
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+
+* Next.js
+* React
+* TypeScript
+* Tailwind CSS
+
+### Backend
+
+* NestJS
+* TypeScript
+* Prisma
+* PostgreSQL
+
+### Authentication & Authorization
+
+* JWT authentication
+* Role-based access control
+* Separate Admin, Coach, and Athlete workflows
+
+---
+
+## 📁 Project Structure
+
+```text
+fitcoach/
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   ├── hooks/
+│   └── ...
+│
+├── backend/
+│   ├── src/
+│   │   ├── auth/
+│   │   ├── users/
+│   │   ├── workouts/
+│   │   ├── exercises/
+│   │   └── ...
+│   └── prisma/
+│
+└── README.md
+```
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js 18+
-- Docker
+Make sure you have installed:
 
-### 1. Install & configure
+* Node.js
+* npm
+* PostgreSQL
+
+### Clone the repository
 
 ```bash
-cp .env.example .env
+git clone https://github.com/arvinzaferani/fitcoach.git
+
+cd fitcoach
+```
+
+### Install dependencies
+
+Install frontend dependencies:
+
+```bash
+cd frontend
 npm install
 ```
 
-### 2. Start services (PostgreSQL, Adminer, MinIO)
+Install backend dependencies:
 
 ```bash
-docker compose up -d postgres adminer minio minio-init
+cd ../backend
+npm install
 ```
 
-### 3. Set up the database
+### Environment Variables
+
+Create the required `.env` files based on the provided environment examples.
+
+Example:
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/fitcoach"
+
+JWT_SECRET="your-secret"
+```
+
+### Database
+
+Run Prisma migrations:
 
 ```bash
-npm run prisma:generate
-npm run prisma:migrate
-npm run prisma:seed
+npx prisma migrate dev
 ```
 
-### 4. Run the apps
+Generate Prisma Client:
 
 ```bash
-npm run dev:backend   # API → http://localhost:3001
-npm run dev:frontend  # UI  → http://localhost:3000
+npx prisma generate
 ```
 
-### Demo accounts (from seed)
+### Run the application
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@fitcoach.local` | `Fit123!@` |
-| Coach | `coach@fitcoach.local` | `Fit123!@` |
-| Athlete | `athlete@fitcoach.local` | `Fit123!@` |
+Backend:
 
-## Project Structure
-
-```text
-gym/
-├── frontend/                 # Next.js app
-│   ├── app/
-│   │   ├── login/ register/  # Authentication
-│   │   ├── admin/            # Exercise library management
-│   │   ├── coach/            # Dashboard, templates, athletes, assignments
-│   │   └── athlete/          # Dashboard, workouts, metrics, coaches
-│   ├── components/           # Shared UI and spec components
-│   ├── lib/                  # API client, utilities, mock data
-│   └── types/                # Domain types
-├── backend/                  # NestJS API
-│   ├── src/
-│   │   ├── modules/          # auth, users, media, exercises, templates,
-│   │   │                     # coach-athlete, assignments, workouts, metrics
-│   │   ├── common/           # Guards, decorators
-│   │   └── prisma/           # Prisma service
-│   └── prisma/
-│       ├── schema.prisma     # Database models
-│       ├── migrations/
-│       └── seed.ts           # Exercises, templates, demo users
-└── docker-compose.yml        # PostgreSQL, Adminer, MinIO
+```bash
+npm run start:dev
 ```
 
-## Available Scripts
+Frontend:
 
-From the repo root:
+```bash
+npm run dev
+```
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev:frontend` | Start the Next.js dev server |
-| `npm run dev:backend` | Start the NestJS dev server (watch mode) |
-| `npm run build` | Build all workspaces |
-| `npm run lint` | Lint all workspaces |
-| `npm run prisma:generate` | Generate the Prisma client |
-| `npm run prisma:migrate` | Apply database migrations |
-| `npm run prisma:seed` | Seed exercises, templates, and demo users |
+The application should now be available locally.
 
-## API
+---
 
-The API runs under the `/api` prefix (e.g. `http://localhost:3001/api`). Core modules:
+## 🌍 Persian & RTL
 
-- `auth` — login / register / refresh
-- `users` — profile and account management
-- `exercises` — exercise catalog (admin-managed)
-- `media` — exercise GIF upload (MinIO presigned URLs)
-- `templates` — coach program templates
-- `coach-athlete` — invitations and coach–athlete relations
-- `assignments` — program assignment to athletes
-- `workouts` — workout sessions and set logging
-- `metrics` — athlete body metrics
+FitCoach was designed with a **Persian-first approach**, including RTL layouts and Persian user experience considerations.
 
-## License
+Rather than adding RTL support at the end of development, the interface and components were designed with RTL usage in mind from the beginning.
 
-Private project.
+---
+
+## 📸 Screenshots
+
+> Screenshots and product previews will be added here.
+
+### Athlete Dashboard
+
+*Add screenshot here*
+
+### Coach Dashboard
+
+*Add screenshot here*
+
+### Workout Builder
+
+*Add screenshot here*
+
+### Admin Panel
+
+*Add screenshot here*
+
+---
+
+## 🗺️ Roadmap
+
+Some ideas for future iterations:
+
+* [ ] More advanced progress analytics
+* [ ] Exercise media library
+* [ ] Workout templates
+* [ ] Coach–athlete messaging
+* [ ] Notifications
+* [ ] Mobile/PWA experience
+* [ ] More advanced workout customization
+
+---
+
+## 🎯 Project Goals
+
+FitCoach was built as a practical full-stack product to explore:
+
+* Designing a multi-role application
+* Building flexible workout data models
+* Implementing role-based access control
+* Designing coach–athlete workflows
+* Building reusable frontend components
+* Working with relational data using Prisma and PostgreSQL
+* Creating a Persian-first RTL experience
+
+---
+
+## 👨‍💻 Author
+
+**Arvin Zaferani**
+
+Frontend Developer focused on building scalable and user-focused web applications.
+
+* GitHub: [https://github.com/arvinzaferani](https://github.com/arvinzaferani)
+* LinkedIn: [https://www.linkedin.com/in/a-zaferani](https://www.linkedin.com/in/a-zaferani)
+
+---
+
+## 📄 License
+
+This project is currently for educational and portfolio purposes.
